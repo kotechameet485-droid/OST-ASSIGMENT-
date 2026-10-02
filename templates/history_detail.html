@@ -1,0 +1,137 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Historical Health Audit — {{ repository.full_name }}{% endblock %}
+
+{% block content %}
+<div class="py-5">
+    <div class="container-xl">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4 pb-3 border-bottom">
+            <div>
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <a href="{% url 'history' %}" class="btn btn-sm os-btn-secondary">
+                        <i class="bi bi-arrow-left me-1"></i> History Catalog
+                    </a>
+                    <span class="text-muted">/</span>
+                    <span class="fw-semibold text-dark font-monospace">{{ repository.full_name }}</span>
+                </div>
+                <h1 class="h3 fw-bold text-dark mb-0">Historical Health Score Progression</h1>
+            </div>
+            <a href="{% url 'analyze' %}?repo={{ repository.full_name }}" class="btn btn-sm os-btn-primary">
+                <i class="bi bi-arrow-repeat me-1"></i> Re-Analyze Now
+            </a>
+        </div>
+
+        <!-- Health Trend Chart Card -->
+        <div class="card border shadow-sm p-4 mb-4">
+            <h2 class="h5 fw-bold text-dark mb-1 d-flex align-items-center gap-2">
+                <i class="bi bi-graph-up text-primary"></i>
+                Health Score Timeline
+            </h2>
+            <p class="text-secondary small mb-3">Recorded health metrics across chronological evaluation snapshots</p>
+
+            <div class="position-relative" style="height: 260px;">
+                {% if trend.has_trend %}
+                    <canvas id="historicalDetailChart"></canvas>
+                {% else %}
+                    <div class="h-100 d-flex flex-column align-items-center justify-content-center text-muted">
+                        <i class="bi bi-info-circle fs-3 mb-2 text-primary"></i>
+                        <span class="fw-semibold text-dark">Single Snapshot Recorded</span>
+                        <span class="small">Re-analyze this repository over time to build a historical trend curve.</span>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Snapshot Audit Log Table -->
+        <div class="card border shadow-sm">
+            <div class="p-3 border-bottom bg-light">
+                <h3 class="h6 fw-bold text-dark mb-0">Evaluation Snapshot Audit Log ({{ analyses.count }})</h3>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr class="text-muted small">
+                            <th>Evaluation Timestamp</th>
+                            <th>Health Score</th>
+                            <th>Activity (25%)</th>
+                            <th>Issues (20%)</th>
+                            <th>PRs (20%)</th>
+                            <th>Diversity (15%)</th>
+                            <th>Maintenance (20%)</th>
+                            <th>Stars</th>
+                            <th>Forks</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for a in analyses %}
+                        <tr>
+                            <td class="font-monospace small text-dark">{{ a.analyzed_at|date:"M d, Y H:i:s" }}</td>
+                            <td>
+                                <span class="badge {% if a.health_score >= 85 %}bg-success-subtle text-success border border-success-subtle{% elif a.health_score >= 70 %}bg-primary-subtle text-primary border border-primary-subtle{% elif a.health_score >= 50 %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} font-monospace fw-bold">
+                                    {{ a.health_score }} / 100
+                                </span>
+                            </td>
+                            <td class="font-monospace small">{{ a.activity_score }}</td>
+                            <td class="font-monospace small">{{ a.issue_score }}</td>
+                            <td class="font-monospace small">{{ a.pr_score }}</td>
+                            <td class="font-monospace small">{{ a.contributor_score }}</td>
+                            <td class="font-monospace small">{{ a.maintenance_score }}</td>
+                            <td class="font-monospace small text-secondary">{{ a.stars }}</td>
+                            <td class="font-monospace small text-secondary">{{ a.forks }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="9" class="text-center text-muted py-4">No analysis snapshots recorded.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if trend.has_trend %}
+<script>
+    const trendData = {{ trend_json|safe }};
+    const ctx = document.getElementById('historicalDetailChart');
+    if (ctx) {
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: trendData.labels,
+                datasets: [{
+                    label: 'Health Score',
+                    data: trendData.scores,
+                    borderColor: '#2563eb',
+                    backgroundColor: 'rgba(37, 99, 235, 0.08)',
+                    borderWidth: 2,
+                    pointBackgroundColor: '#2563eb',
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    fill: true,
+                    tension: 0.2,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        min: 0,
+                        max: 100,
+                        grid: { color: '#f1f5f9' },
+                    },
+                    x: {
+                        grid: { display: false },
+                    }
+                }
+            }
+        });
+    }
+</script>
+{% endif %}
+{% endblock %}

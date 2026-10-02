@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block title %}500 Server Error — OpenSourceLens{% endblock %}
+{% block content %}
+<div class="container-xl py-5 text-center">
+    <div class="py-5">
+        <div class="display-1 fw-bold text-muted mb-3 font-monospace">500</div>
+        <h1 class="h3 fw-bold text-dark mb-2">Service Execution Error</h1>
+        <p class="text-secondary max-w-lg mx-auto mb-4">
+            We couldn't retrieve or process repository data right now. Please verify your internet connection or check API rate limits.
+        </p>
+        <a href="{% url 'home' %}" class="btn os-btn-primary px-4">
+            <i class="bi bi-arrow-left me-1"></i> Return to Homepage
+        </a>
+    </div>
+</div>
+{% endblock %}

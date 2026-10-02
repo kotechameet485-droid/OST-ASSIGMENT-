@@ -1,0 +1,758 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ repo.full_name }} — OpenSourceLens Analytics{% endblock %}
+
+{% block content %}
+<div class="os-dashboard-container py-4">
+    <div class="container-xl">
+
+        <!-- Top Navigation & Action Bar -->
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4 pb-3 border-bottom">
+            <div class="d-flex align-items-center gap-2">
+                <a href="{% url 'home' %}" class="btn btn-sm os-btn-secondary">
+                    <i class="bi bi-arrow-left me-1"></i> New Search
+                </a>
+                <span class="text-muted">/</span>
+                <span class="text-muted small">Repository Intelligence</span>
+                <span class="text-muted">/</span>
+                <span class="fw-semibold text-dark font-monospace">{{ repo.full_name }}</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <a href="{% url 'compare' %}?repo1={{ repo.full_name }}" class="btn btn-sm os-btn-secondary">
+                    <i class="bi bi-intersect me-1"></i> Compare Repository
+                </a>
+                <a href="{% url 'history_detail' owner=repo.owner repo=repo.name %}" class="btn btn-sm os-btn-secondary">
+                    <i class="bi bi-clock-history me-1"></i> View Health History
+                </a>
+                <a href="{{ repo.url }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm os-btn-outline">
+                    <i class="bi bi-box-arrow-up-right me-1"></i> GitHub
+                </a>
+            </div>
+        </div>
+
+        <!-- LEVEL 1: Repository Header Card -->
+        <div class="card os-repo-header-card border shadow-sm p-4 mb-4">
+            <div class="row align-items-center gy-3">
+                <div class="col-lg-8">
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                        <span class="os-repo-icon-wrapper">
+                            <i class="bi bi-journal-code text-primary fs-4"></i>
+                        </span>
+                        <h1 class="h3 fw-bold text-dark mb-0 font-monospace">{{ repo.full_name }}</h1>
+                        <span class="badge bg-light text-secondary border">Public</span>
+                        {% if repo.is_archived %}
+                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Archived</span>
+                        {% endif %}
+                        {% if repo.is_fork %}
+                            <span class="badge bg-warning-subtle text-warning-emphasis border">Fork</span>
+                        {% endif %}
+                    </div>
+                    <p class="text-secondary mb-3 fs-6">
+                        {{ repo.description|default:"No description provided for this repository." }}
+                    </p>
+                    <div class="d-flex flex-wrap align-items-center gap-3 text-muted small">
+                        <span><i class="bi bi-shield-check me-1 text-primary"></i>License: <strong>{{ repo.license }}</strong></span>
+                        <span>·</span>
+                        <span><i class="bi bi-git me-1 text-primary"></i>Default branch: <strong>{{ repo.default_branch }}</strong></span>
+                        <span>·</span>
+                        <span><i class="bi bi-calendar-event me-1 text-primary"></i>Created: <strong>{{ repo.created_at|slice:":10" }}</strong></span>
+                        <span>·</span>
+                        <span><i class="bi bi-arrow-repeat me-1 text-primary"></i>Last push: <strong>{{ repo.pushed_at|slice:":10" }}</strong></span>
+                    </div>
+                </div>
+
+                <!-- Health Score Hero Summary -->
+                <div class="col-lg-4 text-lg-end">
+                    <div class="d-inline-block text-start border rounded-3 p-3 bg-white shadow-sm" style="min-width: 220px;">
+                        <div class="d-flex align-items-center justify-content-between gap-3 mb-1">
+                            <span class="text-muted small fw-semibold text-uppercase tracking-wider">Repository Health</span>
+                            <span class="badge bg-{{ health.tier_badge }}-subtle text-{{ health.tier_badge }} border border-{{ health.tier_badge }}-subtle">
+                                {{ health.health_tier }}
+                            </span>
+                        </div>
+                        <div class="d-flex align-items-baseline gap-2">
+                            <span class="display-5 fw-bold text-dark">{{ health.total_score }}</span>
+                            <span class="text-muted fs-6">/ 100</span>
+                        </div>
+                        <div class="progress os-progress-mini mt-2" style="height: 6px;">
+                            <div class="progress-bar bg-{{ health.tier_badge }}" role="progressbar" style="width: {{ health.total_score }}%;" aria-valuenow="{{ health.total_score }}" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Primary Stat Cards Row -->
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="card h-100 os-metric-card border shadow-sm p-3">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="text-secondary small fw-medium">Stars</span>
+                        <span class="text-warning"><i class="bi bi-star-fill"></i></span>
+                    </div>
+                    <div class="h3 fw-bold text-dark mb-0 font-monospace">{{ metrics.stars }}</div>
+                    <div class="text-muted extra-small mt-1">Stargazers</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="card h-100 os-metric-card border shadow-sm p-3">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="text-secondary small fw-medium">Forks</span>
+                        <span class="text-info"><i class="bi bi-bezier2"></i></span>
+                    </div>
+                    <div class="h3 fw-bold text-dark mb-0 font-monospace">{{ metrics.forks }}</div>
+                    <div class="text-muted extra-small mt-1">Network forks</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="card h-100 os-metric-card border shadow-sm p-3">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="text-secondary small fw-medium">Watchers</span>
+                        <span class="text-primary"><i class="bi bi-eye-fill"></i></span>
+                    </div>
+                    <div class="h3 fw-bold text-dark mb-0 font-monospace">{{ metrics.watchers }}</div>
+                    <div class="text-muted extra-small mt-1">Subscribers</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="card h-100 os-metric-card border shadow-sm p-3">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="text-secondary small fw-medium">Open Issues</span>
+                        <span class="text-danger"><i class="bi bi-exclamation-circle-fill"></i></span>
+                    </div>
+                    <div class="h3 fw-bold text-dark mb-0 font-monospace">{{ metrics.open_issues }}</div>
+                    <div class="text-muted extra-small mt-1">Active backlog</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="card h-100 os-metric-card border shadow-sm p-3">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="text-secondary small fw-medium">Commits</span>
+                        <span class="text-success"><i class="bi bi-git"></i></span>
+                    </div>
+                    <div class="h3 fw-bold text-dark mb-0 font-monospace">{{ metrics.commits_analyzed }}</div>
+                    <div class="text-muted extra-small mt-1">Analyzed in sample</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="card h-100 os-metric-card border shadow-sm p-3">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="text-secondary small fw-medium">Contributors</span>
+                        <span class="text-purple"><i class="bi bi-people-fill text-primary"></i></span>
+                    </div>
+                    <div class="h3 fw-bold text-dark mb-0 font-monospace">{{ metrics.contributors_recorded }}</div>
+                    <div class="text-muted extra-small mt-1">Recorded base</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5-PILLAR HEALTH SCORE BREAKDOWN -->
+        <div class="card border shadow-sm p-4 mb-4">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+                <div>
+                    <h2 class="h5 fw-bold text-dark mb-1 d-flex align-items-center gap-2">
+                        <i class="bi bi-shield-check text-primary"></i>
+                        5-Pillar Health Score Breakdown
+                    </h2>
+                    <p class="text-secondary small mb-0">Deterministic maintainability index evaluated across 5 weighted pillars</p>
+                </div>
+                <button class="btn btn-sm os-btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#methodologyCollapse" aria-expanded="false" aria-controls="methodologyCollapse">
+                    <i class="bi bi-question-circle me-1"></i> Methodology Details
+                </button>
+            </div>
+
+            <!-- Health Breakdown Progress Items -->
+            <div class="row g-3">
+                {% for comp in health.components %}
+                <div class="col-md-6 col-lg">
+                    <div class="p-3 bg-light rounded-3 border h-100">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="fw-semibold text-dark small">{{ comp.name }}</span>
+                            <span class="badge bg-white text-secondary border extra-small">{{ comp.weight }}</span>
+                        </div>
+                        <div class="d-flex align-items-baseline gap-1 my-1">
+                            <span class="h4 fw-bold text-dark mb-0 font-monospace">{{ comp.score }}</span>
+                            <span class="text-muted extra-small">/ 100</span>
+                        </div>
+                        <div class="progress mb-2" style="height: 6px;">
+                            <div class="progress-bar {% if comp.score >= 80 %}bg-success{% elif comp.score >= 60 %}bg-primary{% elif comp.score >= 40 %}bg-warning{% else %}bg-danger{% endif %}" role="progressbar" style="width: {{ comp.score }}%;"></div>
+                        </div>
+                        <div class="text-muted extra-small text-truncate-2">{{ comp.description }}</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Expandable Methodology Panel (Section 21) -->
+            <div class="collapse mt-3" id="methodologyCollapse">
+                <div class="card card-body bg-light border-0 small text-secondary">
+                    <h6 class="fw-bold text-dark mb-2">How is this calculated?</h6>
+                    <ul class="mb-0 ps-3">
+                        <li class="mb-1"><strong>Activity (25%):</strong> Evaluates commit recency (days since latest commit) and push cadence. Active commits in the last 7 days receive top scores.</li>
+                        <li class="mb-1"><strong>Issue Management (20%):</strong> Calculated as <code>Resolution Rate = (Closed Issues / Total Issues Analyzed) × 100</code>, factoring in unresolved issues aged >90 days.</li>
+                        <li class="mb-1"><strong>PR Activity (20%):</strong> Calculated as <code>Merge Rate = (Merged PRs / Total PRs Analyzed) × 100</code>, factoring in review turnaround duration.</li>
+                        <li class="mb-1"><strong>Contributor Diversity (15%):</strong> Analyzes contributor volume and contribution distribution concentration (resilience against maintainer churn).</li>
+                        <li><strong>Maintenance & Hygiene (20%):</strong> Validates official open-source license presence, project purpose description, and non-archived status.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Health Rationale Bullet points -->
+            {% if health.rationale %}
+            <div class="mt-3 pt-3 border-top">
+                <span class="text-muted extra-small fw-semibold text-uppercase tracking-wider d-block mb-2">Key Diagnostic Signals</span>
+                <div class="d-flex flex-wrap gap-2">
+                    {% for item in health.rationale %}
+                    <span class="badge bg-light text-secondary border px-2 py-1 small fw-normal">
+                        <i class="bi bi-info-circle text-primary me-1"></i>{{ item }}
+                    </span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- LEVEL 2: COMMIT ACTIVITY & TIME-SERIES TRENDS -->
+        <div class="card border shadow-sm p-4 mb-4">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+                <div>
+                    <h2 class="h5 fw-bold text-dark mb-1 d-flex align-items-center gap-2">
+                        <i class="bi bi-activity text-primary"></i>
+                        Commit Activity & Time-Series Velocity
+                    </h2>
+                    <p class="text-secondary small mb-0">Commit cadence aggregated through Pandas across customizable historical windows</p>
+                </div>
+
+                <!-- Time Filter Controls (Section 24) -->
+                <div class="btn-group btn-group-sm" role="group" aria-label="Commit Time Range">
+                    <button type="button" class="btn btn-outline-primary active" id="btn-trend-30d" onclick="switchCommitRange('30d')">Last 30 Days</button>
+                    <button type="button" class="btn btn-outline-primary" id="btn-trend-90d" onclick="switchCommitRange('90d')">Last 90 Days</button>
+                    <button type="button" class="btn btn-outline-primary" id="btn-trend-6m" onclick="switchCommitRange('6m')">Last 6 Months</button>
+                </div>
+            </div>
+
+            <!-- Commit Summary Stat Badges -->
+            <div class="row g-3 mb-3">
+                <div class="col-sm-4">
+                    <div class="p-2 border rounded-2 bg-light text-center">
+                        <div class="text-muted extra-small">Avg Commits / Day</div>
+                        <div class="h5 fw-bold text-dark mb-0 font-monospace">{{ commit_stats.commits_per_day_avg }}</div>
+                    </div>
+                </div>
+                <div class="col-sm-4">
+                    <div class="p-2 border rounded-2 bg-light text-center">
+                        <div class="text-muted extra-small">Max Single-Day Commits</div>
+                        <div class="h5 fw-bold text-dark mb-0 font-monospace">{{ commit_stats.max_commits_day }}</div>
+                    </div>
+                </div>
+                <div class="col-sm-4">
+                    <div class="p-2 border rounded-2 bg-light text-center">
+                        <div class="text-muted extra-small">Days Since Latest Commit</div>
+                        <div class="h5 fw-bold text-dark mb-0 font-monospace">
+                            {% if commit_stats.days_since_latest is not None %}
+                                {{ commit_stats.days_since_latest }} day{% if commit_stats.days_since_latest != 1 %}s{% endif %}
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Commit Trend Line/Area Chart Canvas -->
+            <div class="position-relative" style="height: 260px;">
+                <canvas id="commitTrendChart"></canvas>
+            </div>
+        </div>
+
+        <!-- LEVEL 2: ISSUES & PULL REQUESTS ANALYTICS (SIDE-BY-SIDE) -->
+        <div class="row g-4 mb-4">
+
+            <!-- Issue Analytics Card -->
+            <div class="col-lg-6">
+                <div class="card h-100 border shadow-sm p-4">
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <div>
+                            <h3 class="h5 fw-bold text-dark mb-1 d-flex align-items-center gap-2">
+                                <i class="bi bi-exclamation-octagon text-danger"></i>
+                                Issue Analytics
+                            </h3>
+                            <p class="text-secondary small mb-0">Triage health and resolution velocity</p>
+                        </div>
+                        <span class="badge bg-light text-secondary border font-monospace">
+                            {{ issue_stats.total_analyzed }} Analyzed
+                        </span>
+                    </div>
+
+                    <!-- Issue Summary Pills -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-4">
+                            <div class="p-2 border rounded-2 bg-light text-center">
+                                <div class="text-muted extra-small">Resolution Rate</div>
+                                <div class="h5 fw-bold text-success mb-0 font-monospace">{{ issue_stats.resolution_rate }}%</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 border rounded-2 bg-light text-center">
+                                <div class="text-muted extra-small">Avg Resolution Time</div>
+                                <div class="h5 fw-bold text-dark mb-0 font-monospace">
+                                    {% if issue_stats.avg_resolution_days %}{{ issue_stats.avg_resolution_days }} d{% else %}N/A{% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 border rounded-2 bg-light text-center">
+                                <div class="text-muted extra-small">Old Issues (>90d)</div>
+                                <div class="h5 fw-bold text-warning-emphasis mb-0 font-monospace">{{ issue_stats.old_unresolved_count }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Issues Opened vs Closed Chart -->
+                    <div class="position-relative" style="height: 220px;">
+                        {% if issue_stats.trend_labels %}
+                            <canvas id="issuesChart"></canvas>
+                        {% else %}
+                            <div class="h-100 d-flex flex-column align-items-center justify-content-center text-muted">
+                                <i class="bi bi-inbox fs-3 mb-2"></i>
+                                <span class="small">Insufficient issue history for monthly comparison</span>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pull Request Analytics Card -->
+            <div class="col-lg-6">
+                <div class="card h-100 border shadow-sm p-4">
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <div>
+                            <h3 class="h5 fw-bold text-dark mb-1 d-flex align-items-center gap-2">
+                                <i class="bi bi-sign-merge-right text-primary"></i>
+                                Pull Request Analytics
+                            </h3>
+                            <p class="text-secondary small mb-0">Contribution integration & turnaround velocity</p>
+                        </div>
+                        <span class="badge bg-light text-secondary border font-monospace">
+                            {{ pr_stats.total_analyzed }} Analyzed
+                        </span>
+                    </div>
+
+                    <!-- PR Summary Pills -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-4">
+                            <div class="p-2 border rounded-2 bg-light text-center">
+                                <div class="text-muted extra-small">PR Merge Rate</div>
+                                <div class="h5 fw-bold text-primary mb-0 font-monospace">{{ pr_stats.merge_rate }}%</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 border rounded-2 bg-light text-center">
+                                <div class="text-muted extra-small">Avg Merge Time</div>
+                                <div class="h5 fw-bold text-dark mb-0 font-monospace">{{ pr_stats.avg_merge_time_display }}</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 border rounded-2 bg-light text-center">
+                                <div class="text-muted extra-small">Open PRs</div>
+                                <div class="h5 fw-bold text-info mb-0 font-monospace">{{ pr_stats.open_count }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PR State Doughnut Chart -->
+                    <div class="position-relative" style="height: 220px;">
+                        {% if pr_stats.total_analyzed > 0 %}
+                            <canvas id="prsChart"></canvas>
+                        {% else %}
+                            <div class="h-100 d-flex flex-column align-items-center justify-content-center text-muted">
+                                <i class="bi bi-inbox fs-3 mb-2"></i>
+                                <span class="small">No pull request activity recorded in this repository</span>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- LEVEL 2: CONTRIBUTORS & DISTRIBUTION LEADERBOARD -->
+        <div class="card border shadow-sm p-4 mb-4">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+                <div>
+                    <h2 class="h5 fw-bold text-dark mb-1 d-flex align-items-center gap-2">
+                        <i class="bi bi-people text-primary"></i>
+                        Contributor Community & Distribution Concentration
+                    </h2>
+                    <p class="text-secondary small mb-0">Community depth and maintainer dependency analysis</p>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-light text-secondary border">
+                        Top 1 Contributor Share: <strong class="font-monospace">{{ contributor_stats.top1_share }}%</strong>
+                    </span>
+                    <span class="badge bg-light text-secondary border">
+                        Top 5 Share: <strong class="font-monospace">{{ contributor_stats.top5_share }}%</strong>
+                    </span>
+                </div>
+            </div>
+
+            <!-- Contributor Leaderboard Table -->
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr class="text-muted small">
+                            <th style="width: 60px;">Rank</th>
+                            <th>Contributor</th>
+                            <th class="text-end">Contributions</th>
+                            <th style="width: 250px;">Share of Sample</th>
+                            <th class="text-end">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in contributor_stats.leaderboard %}
+                        <tr>
+                            <td class="font-monospace fw-semibold text-secondary">#{{ c.rank }}</td>
+                            <td>
+                                <div class="d-flex align-items-center gap-2">
+                                    {% if c.avatar_url %}
+                                        <img src="{{ c.avatar_url }}" alt="{{ c.username }}" class="rounded-circle" width="28" height="28" loading="lazy">
+                                    {% else %}
+                                        <div class="rounded-circle bg-light d-flex align-items-center justify-content-center border" style="width: 28px; height: 28px;">
+                                            <i class="bi bi-person text-secondary"></i>
+                                        </div>
+                                    {% endif %}
+                                    <span class="fw-semibold text-dark">{{ c.username }}</span>
+                                </div>
+                            </td>
+                            <td class="text-end font-monospace fw-semibold">{{ c.contributions }}</td>
+                            <td>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="progress flex-grow-1" style="height: 6px;">
+                                        <div class="progress-bar bg-primary" role="progressbar" style="width: {{ c.share_percentage }}%;"></div>
+                                    </div>
+                                    <span class="extra-small font-monospace text-secondary" style="min-width: 45px;">{{ c.share_percentage }}%</span>
+                                </div>
+                            </td>
+                            <td class="text-end">
+                                {% if c.profile_url %}
+                                    <a href="{{ c.profile_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm os-btn-outline py-0 px-2 extra-small">
+                                        Profile <i class="bi bi-arrow-up-right"></i>
+                                    </a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">No contributor data available.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- LEVEL 2: PROGRAMMING LANGUAGES BREAKDOWN -->
+        <div class="card border shadow-sm p-4 mb-4">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+                <div>
+                    <h2 class="h5 fw-bold text-dark mb-1 d-flex align-items-center gap-2">
+                        <i class="bi bi-code-slash text-primary"></i>
+                        Programming Languages & Technology Breakdown
+                    </h2>
+                    <p class="text-secondary small mb-0">Exact byte distribution and percentage composition computed with Pandas</p>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-light text-primary border">Primary: <strong>{{ language_dist.primary_language }}</strong></span>
+                    <span class="badge bg-light text-secondary border">Total: <strong>{{ language_dist.total_bytes_formatted }}</strong></span>
+                </div>
+            </div>
+
+            <div class="row align-items-center g-4">
+                <div class="col-md-5 col-lg-4 text-center">
+                    <div class="position-relative mx-auto" style="height: 220px; max-width: 240px;">
+                        {% if language_dist.items %}
+                            <canvas id="languagesChart"></canvas>
+                        {% else %}
+                            <div class="h-100 d-flex flex-column align-items-center justify-content-center text-muted">
+                                <i class="bi bi-inbox fs-3 mb-2"></i>
+                                <span class="small">No language data recorded</span>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-7 col-lg-8">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr class="text-muted extra-small">
+                                    <th>Language</th>
+                                    <th>Bytes</th>
+                                    <th>Percentage</th>
+                                    <th style="width: 180px;">Distribution</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in language_dist.items %}
+                                <tr>
+                                    <td>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="os-color-bullet" style="background-color: {{ item.color }};"></span>
+                                            <span class="fw-semibold text-dark small">{{ item.language }}</span>
+                                        </div>
+                                    </td>
+                                    <td class="font-monospace small text-secondary">{{ item.bytes_formatted }}</td>
+                                    <td class="font-monospace fw-semibold small">{{ item.percentage }}%</td>
+                                    <td>
+                                        <div class="progress" style="height: 6px;">
+                                            <div class="progress-bar" role="progressbar" style="width: {{ item.percentage }}%; background-color: {{ item.color }};"></div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-3">No language breakdown data available.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- LEVEL 3: HISTORICAL HEALTH SCORE TREND (Section 30) -->
+        {% if health_trend.has_trend %}
+        <div class="card border shadow-sm p-4 mb-4">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <div>
+                    <h2 class="h5 fw-bold text-dark mb-1 d-flex align-items-center gap-2">
+                        <i class="bi bi-graph-up text-primary"></i>
+                        Historical Health Score Trend
+                    </h2>
+                    <p class="text-secondary small mb-0">Score progression across previous analyses of this repository</p>
+                </div>
+                <a href="{% url 'history_detail' owner=repo.owner repo=repo.name %}" class="btn btn-sm os-btn-secondary">
+                    View Complete Audit Log <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+            <div class="position-relative" style="height: 220px;">
+                <canvas id="healthTrendChart"></canvas>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Ingest JSON payloads passed from Django AnalyticsEngine
+    const commitTrendPayload = {{ chart_payloads.commit_trend|safe }};
+    const issuesTrendPayload = {{ chart_payloads.issues_trend|safe }};
+    const prsStatusPayload = {{ chart_payloads.prs_status|safe }};
+    const languagesPayload = {{ chart_payloads.languages|safe }};
+    const healthTrendPayload = {{ chart_payloads.health_trend|safe }};
+
+    // Global Chart.js styling defaults for developer-focused aesthetic
+    Chart.defaults.font.family = "'Inter', -apple-system, sans-serif";
+    Chart.defaults.color = '#64748b';
+    Chart.defaults.plugins.tooltip.backgroundColor = '#0f172a';
+    Chart.defaults.plugins.tooltip.titleColor = '#ffffff';
+    Chart.defaults.plugins.tooltip.bodyColor = '#f1f5f9';
+    Chart.defaults.plugins.tooltip.padding = 10;
+    Chart.defaults.plugins.tooltip.cornerRadius = 6;
+
+    // 1. Commit Trend Line / Area Chart
+    const commitCtx = document.getElementById('commitTrendChart');
+    let commitChart = null;
+
+    if (commitCtx) {
+        commitChart = new Chart(commitCtx, {
+            type: 'line',
+            data: {
+                labels: commitTrendPayload.labels_30d,
+                datasets: [{
+                    label: 'Commits',
+                    data: commitTrendPayload.data_30d,
+                    borderColor: '#2563eb',
+                    backgroundColor: 'rgba(37, 99, 235, 0.08)',
+                    borderWidth: 2,
+                    pointBackgroundColor: '#2563eb',
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                    fill: true,
+                    tension: 0.25,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { maxTicksLimit: 12, font: { size: 11 } },
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: '#f1f5f9' },
+                        ticks: { precision: 0, font: { size: 11 } },
+                    }
+                }
+            }
+        });
+    }
+
+    // Filter toggles for Commit Trend (30d / 90d / 6m)
+    function switchCommitRange(range) {
+        if (!commitChart) return;
+        ['30d', '90d', '6m'].forEach(r => {
+            const btn = document.getElementById(`btn-trend-${r}`);
+            if (btn) btn.classList.remove('active');
+        });
+        const activeBtn = document.getElementById(`btn-trend-${range}`);
+        if (activeBtn) activeBtn.classList.add('active');
+
+        if (range === '30d') {
+            commitChart.data.labels = commitTrendPayload.labels_30d;
+            commitChart.data.datasets[0].data = commitTrendPayload.data_30d;
+        } else if (range === '90d') {
+            commitChart.data.labels = commitTrendPayload.labels_90d;
+            commitChart.data.datasets[0].data = commitTrendPayload.data_90d;
+        } else if (range === '6m') {
+            commitChart.data.labels = commitTrendPayload.labels_6m;
+            commitChart.data.datasets[0].data = commitTrendPayload.data_6m;
+        }
+        commitChart.update();
+    }
+
+    // 2. Issues Opened vs Closed Bar Chart
+    const issuesCtx = document.getElementById('issuesChart');
+    if (issuesCtx && issuesTrendPayload.labels && issuesTrendPayload.labels.length > 0) {
+        new Chart(issuesCtx, {
+            type: 'bar',
+            data: {
+                labels: issuesTrendPayload.labels,
+                datasets: [
+                    {
+                        label: 'Opened',
+                        data: issuesTrendPayload.opened,
+                        backgroundColor: '#ef4444',
+                        borderRadius: 4,
+                    },
+                    {
+                        label: 'Closed',
+                        data: issuesTrendPayload.closed,
+                        backgroundColor: '#10b981',
+                        borderRadius: 4,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+                },
+                scales: {
+                    x: { grid: { display: false } },
+                    y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { precision: 0 } },
+                }
+            }
+        });
+    }
+
+    // 3. PR Status Doughnut Chart
+    const prsCtx = document.getElementById('prsChart');
+    if (prsCtx && prsStatusPayload.data) {
+        new Chart(prsCtx, {
+            type: 'doughnut',
+            data: {
+                labels: prsStatusPayload.labels,
+                datasets: [{
+                    data: prsStatusPayload.data,
+                    backgroundColor: ['#2563eb', '#38bdf8', '#cbd5e1'],
+                    borderWidth: 2,
+                    borderColor: '#ffffff',
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+                },
+                cutout: '68%',
+            }
+        });
+    }
+
+    // 4. Languages Doughnut Chart
+    const langsCtx = document.getElementById('languagesChart');
+    if (langsCtx && languagesPayload.data && languagesPayload.data.length > 0) {
+        new Chart(langsCtx, {
+            type: 'doughnut',
+            data: {
+                labels: languagesPayload.labels,
+                datasets: [{
+                    data: languagesPayload.data,
+                    backgroundColor: languagesPayload.colors,
+                    borderWidth: 2,
+                    borderColor: '#ffffff',
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                },
+                cutout: '68%',
+            }
+        });
+    }
+
+    // 5. Health Trend Line Chart (if historical data exists)
+    const healthCtx = document.getElementById('healthTrendChart');
+    if (healthCtx && healthTrendPayload.scores && healthTrendPayload.scores.length > 1) {
+        new Chart(healthCtx, {
+            type: 'line',
+            data: {
+                labels: healthTrendPayload.labels,
+                datasets: [{
+                    label: 'Health Score',
+                    data: healthTrendPayload.scores,
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                    borderWidth: 2,
+                    pointBackgroundColor: '#10b981',
+                    pointRadius: 4,
+                    fill: true,
+                    tension: 0.2,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                },
+                scales: {
+                    y: {
+                        min: 0,
+                        max: 100,
+                        grid: { color: '#f1f5f9' },
+                    },
+                    x: {
+                        grid: { display: false },
+                    }
+                }
+            }
+        });
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}OpenSourceLens — Repository Intelligence & Health Platform{% endblock %}</title>
+    <meta name="description" content="OpenSourceLens analyzes public GitHub repositories and transforms repository activity into understandable metrics, trends, and health signals.">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+
+    <!-- Custom Design System -->
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="d-flex flex-column min-vh-100 os-app-body">
+
+    <!-- Developer Navigation Bar -->
+    <header class="os-header border-bottom sticky-top">
+        <nav class="navbar navbar-expand-lg py-2">
+            <div class="container-xl">
+                <a class="navbar-brand d-flex align-items-center gap-2" href="{% url 'home' %}">
+                    <span class="os-brand-icon">
+                        <i class="bi bi-diagram-3-fill"></i>
+                    </span>
+                    <span class="os-brand-text">OpenSource<span class="os-accent">Lens</span></span>
+                    <span class="badge os-badge-pill ms-1">OST v1.0</span>
+                </a>
+
+                <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#osNavbar" aria-controls="osNavbar" aria-expanded="false" aria-label="Toggle navigation">
+                    <i class="bi bi-list fs-4"></i>
+                </button>
+
+                <div class="collapse navbar-collapse" id="osNavbar">
+                    <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-lg-3">
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'home' %}active{% endif %}" href="{% url 'home' %}">
+                                <i class="bi bi-house me-1"></i> Home
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'analyze' %}active{% endif %}" href="{% url 'home' %}#search-section">
+                                <i class="bi bi-search me-1"></i> Analyze
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'history' %}active{% endif %}" href="{% url 'history' %}">
+                                <i class="bi bi-clock-history me-1"></i> History
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'compare' %}active{% endif %}" href="{% url 'compare' %}">
+                                <i class="bi bi-intersect me-1"></i> Compare
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'about' %}active{% endif %}" href="{% url 'about' %}">
+                                <i class="bi bi-info-circle me-1"></i> Architecture
+                            </a>
+                        </li>
+                    </ul>
+
+                    <div class="d-flex align-items-center gap-2">
+                        <a href="https://github.com" target="_blank" rel="noopener noreferrer" class="btn btn-sm os-btn-secondary">
+                            <i class="bi bi-github me-1"></i> GitHub REST API
+                        </a>
+                        <a href="/admin/" class="btn btn-sm os-btn-outline">
+                            <i class="bi bi-shield-lock me-1"></i> Admin
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Global Toast / Alert Messages -->
+    <div class="container-xl mt-3">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %} alert-dismissible fade show os-alert shadow-sm" role="alert">
+                    <div class="d-flex align-items-center gap-2">
+                        {% if message.tags == 'error' %}
+                            <i class="bi bi-exclamation-octagon-fill text-danger fs-5"></i>
+                        {% else %}
+                            <i class="bi bi-info-circle-fill text-primary fs-5"></i>
+                        {% endif %}
+                        <div>{{ message }}</div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    </div>
+
+    <!-- Main Content Area -->
+    <main class="flex-grow-1">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Developer Footer -->
+    <footer class="os-footer border-top py-4 mt-5">
+        <div class="container-xl">
+            <div class="row gy-3 align-items-center">
+                <div class="col-md-6 text-center text-md-start">
+                    <div class="d-flex align-items-center justify-content-center justify-content-md-start gap-2 mb-1">
+                        <span class="fw-semibold text-dark">OpenSourceLens</span>
+                        <span class="text-muted">·</span>
+                        <span class="text-muted small">Open-Source Project Intelligence & Health Analytics</span>
+                    </div>
+                    <p class="text-muted small mb-0">Built for College OST Coursework. Powered by Django, PostgreSQL, Pandas, and GitHub REST API.</p>
+                </div>
+                <div class="col-md-6 text-center text-md-end">
+                    <div class="d-flex align-items-center justify-content-center justify-content-md-end gap-3 text-muted small">
+                        <span>Phase 1: Foundation</span>
+                        <span>·</span>
+                        <a href="{% url 'about' %}" class="text-decoration-none text-muted hover-accent">Methodology</a>
+                        <span>·</span>
+                        <a href="/admin/" class="text-decoration-none text-muted hover-accent">Data Inspector</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Bootstrap 5 JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Chart.js 4.4 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <!-- App Client Script -->
+    <script src="{% static 'js/app.js' %}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

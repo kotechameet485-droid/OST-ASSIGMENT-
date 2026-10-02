@@ -1,0 +1,125 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Repository History — OpenSourceLens{% endblock %}
+
+{% block content %}
+<div class="py-5">
+    <div class="container-xl">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4 pb-3 border-bottom">
+            <div>
+                <h1 class="h3 fw-bold text-dark mb-1">Repository History Catalog</h1>
+                <p class="text-secondary small mb-0">Persisted repository intelligence, health scores, and historical analysis snapshots</p>
+            </div>
+            <a href="{% url 'home' %}#search-section" class="btn btn-sm os-btn-primary">
+                <i class="bi bi-plus-lg me-1"></i> Analyze New Repository
+            </a>
+        </div>
+
+        <!-- Search & Filter Controls -->
+        <div class="card border shadow-sm p-3 mb-4 bg-white">
+            <form method="GET" action="{% url 'history' %}" class="row g-2 align-items-center">
+                <div class="col-md-7">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                        <input type="text" name="q" value="{{ query|default:'' }}" class="form-control border-start-0 ps-0" placeholder="Search by repository name, owner, or description...">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <select name="sort" class="form-select" onchange="this.form.submit()">
+                        <option value="recent" {% if sort_by == 'recent' %}selected{% endif %}>Sort by: Recently Analyzed</option>
+                        <option value="health" {% if sort_by == 'health' %}selected{% endif %}>Sort by: Highest Health Score</option>
+                        <option value="stars" {% if sort_by == 'stars' %}selected{% endif %}>Sort by: Most Stars</option>
+                        <option value="name" {% if sort_by == 'name' %}selected{% endif %}>Sort by: Repository Name (A-Z)</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex gap-2">
+                    <button type="submit" class="btn os-btn-primary w-100">Filter</button>
+                    {% if query %}
+                        <a href="{% url 'history' %}" class="btn os-btn-secondary">Reset</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+
+        {% if repo_list %}
+            <div class="card border shadow-sm">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr class="text-muted small">
+                                <th>Repository</th>
+                                <th>Health Score</th>
+                                <th>Stars</th>
+                                <th>Forks</th>
+                                <th>Open Issues</th>
+                                <th>Snapshots</th>
+                                <th>Last Analyzed</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in repo_list %}
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold text-dark font-monospace">{{ item.repo.full_name }}</div>
+                                    <div class="text-muted small text-truncate" style="max-width: 320px;">
+                                        {{ item.repo.description|default:"No description available." }}
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if item.latest_analysis %}
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="badge {% if item.latest_analysis.health_score >= 85 %}bg-success-subtle text-success border border-success-subtle{% elif item.latest_analysis.health_score >= 70 %}bg-primary-subtle text-primary border border-primary-subtle{% elif item.latest_analysis.health_score >= 50 %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} font-monospace fw-bold">
+                                                {{ item.latest_analysis.health_score }} / 100
+                                            </span>
+                                            <span class="extra-small text-muted">{{ item.latest_analysis.health_tier }}</span>
+                                        </div>
+                                    {% else %}
+                                        <span class="text-muted small">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="font-monospace fw-semibold"><i class="bi bi-star-fill text-warning me-1"></i>{{ item.repo.stars }}</td>
+                                <td class="font-monospace text-secondary">{{ item.repo.forks }}</td>
+                                <td class="font-monospace text-secondary">{{ item.repo.open_issues }}</td>
+                                <td>
+                                    <span class="badge bg-light text-secondary border font-monospace">{{ item.analyses_count }}</span>
+                                </td>
+                                <td class="text-muted small">{{ item.repo.fetched_at|date:"M d, Y H:i" }}</td>
+                                <td class="text-end">
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{% url 'analyze' %}?repo={{ item.repo.full_name }}" class="btn os-btn-secondary" title="View Full Dashboard">
+                                            Dashboard
+                                        </a>
+                                        <a href="{% url 'history_detail' owner=item.repo.owner repo=item.repo.name %}" class="btn os-btn-outline" title="View Historical Audit & Trends">
+                                            <i class="bi bi-graph-up"></i>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        {% else %}
+            <div class="card border shadow-sm p-5 text-center">
+                <div class="py-4">
+                    <i class="bi bi-inbox fs-1 text-muted d-block mb-3"></i>
+                    <h3 class="h5 fw-bold text-dark mb-2">No Repositories Found</h3>
+                    <p class="text-secondary small mb-4">
+                        {% if query %}
+                            No stored repositories match your query "{{ query }}". Try searching another term or analyze a new repository.
+                        {% else %}
+                            Your intelligence database has no analyzed repositories yet. Start by analyzing any public GitHub project.
+                        {% endif %}
+                    </p>
+                    <a href="{% url 'home' %}" class="btn os-btn-primary px-4">
+                        <i class="bi bi-search me-1"></i> Analyze a Repository
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

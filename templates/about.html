@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Architecture & Methodology — OpenSourceLens{% endblock %}
+
+{% block content %}
+<div class="py-5">
+    <div class="container-xl">
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+
+                <div class="text-center mb-5">
+                    <span class="badge bg-light text-primary border px-3 py-1 mb-2">College OST Coursework Platform</span>
+                    <h1 class="display-6 fw-bold text-dark mb-3">OpenSourceLens Platform Architecture</h1>
+                    <p class="lead text-secondary max-w-2xl mx-auto">
+                        A production-style foundation for analyzing open-source software health, development metrics, and community sustainability.
+                    </p>
+                </div>
+
+                <!-- Architectural Flow Diagram Card -->
+                <div class="card border shadow-sm p-4 mb-5">
+                    <h2 class="h5 fw-bold text-dark mb-3 d-flex align-items-center gap-2">
+                        <i class="bi bi-diagram-3 text-primary"></i>
+                        System Data Pipeline
+                    </h2>
+                    <div class="p-3 bg-light rounded-3 font-monospace small text-dark border">
+<pre class="mb-0">
+USER
+  ↓
+DJANGO WEB APPLICATION (Controllers & Views)
+  ↓
+REPOSITORY INPUT (Validation & Sanitization)
+  ↓
+GITHUB API SERVICE (Authenticated REST Client & Rate Limiting)
+  ↓
+GITHUB PUBLIC DATA (JSON Payloads & Headers)
+  ↓
+POSTGRESQL (Relational Models: Repositories, Contributors, Languages, Issues, PRs)
+  ↓
+PANDAS / ANALYTICS (DataFrames, Vectorized Percentage Distributions)
+  ↓
+HEALTH METRICS (5 Weighted Pillars: Activity, Issues, PRs, Diversity, Maintenance)
+  ↓
+INTERACTIVE DASHBOARD (Bootstrap 5 + Custom Design System)
+</pre>
+                    </div>
+                </div>
+
+                <!-- Methodology Cards -->
+                <div class="row g-4 mb-5">
+                    <div class="col-md-6">
+                        <div class="card h-100 border shadow-sm p-4">
+                            <h3 class="h6 fw-bold text-dark mb-2">
+                                <i class="bi bi-sliders text-primary me-2"></i>Health Score Formula
+                            </h3>
+                            <p class="text-secondary small mb-3">
+                                Rather than arbitrary vanity metrics, OpenSourceLens establishes transparent weights based on maintainability:
+                            </p>
+                            <ul class="list-group list-group-flush small">
+                                <li class="list-group-item d-flex justify-content-between px-0">
+                                    <span>Activity (Push recency, release cadence)</span>
+                                    <strong>25%</strong>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between px-0">
+                                    <span>Issue Management (Ratio to community scale)</span>
+                                    <strong>20%</strong>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between px-0">
+                                    <span>PR Activity (Review velocity, status)</span>
+                                    <strong>20%</strong>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between px-0">
+                                    <span>Contributor Diversity (Community distribution)</span>
+                                    <strong>15%</strong>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between px-0">
+                                    <span>Maintenance & Hygiene (License, specs)</span>
+                                    <strong>20%</strong>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="card h-100 border shadow-sm p-4">
+                            <h3 class="h6 fw-bold text-dark mb-2">
+                                <i class="bi bi-stack text-success me-2"></i>Technology Stack
+                            </h3>
+                            <ul class="list-unstyled small text-secondary mb-0">
+                                <li class="mb-2"><strong>Backend:</strong> Python, Django 6, Django ORM, Django Templates</li>
+                                <li class="mb-2"><strong>Database:</strong> PostgreSQL (relational foreign key constraints)</li>
+                                <li class="mb-2"><strong>Data Processing:</strong> Pandas DataFrames</li>
+                                <li class="mb-2"><strong>External API:</strong> GitHub REST API v3</li>
+                                <li class="mb-2"><strong>Frontend:</strong> HTML5, CSS3, JavaScript, Bootstrap 5, Bootstrap Icons</li>
+                                <li class="mb-2"><strong>Design System:</strong> Developer tooling aesthetic (clean slate/charcoal)</li>
+                                <li><strong>Environment:</strong> Python-dotenv configuration (.env)</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
