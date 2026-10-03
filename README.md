@@ -32,12 +32,15 @@
 - [PostgreSQL Setup](#postgresql-setup)
 - [Running the Project](#running-the-project)
 - [Testing](#testing)
+- [Collaborative Git Workflow](#collaborative-git-workflow)
+- [Troubleshooting](#troubleshooting)
 - [Screenshots](#screenshots)
 - [API / Error Handling](#api--error-handling)
 - [Security Considerations](#security-considerations)
 - [OST Syllabus Mapping](#ost-syllabus-mapping)
 - [Future Scope](#future-scope)
 - [License](#license)
+
 
 ---
 
@@ -484,7 +487,158 @@ Ran 63 tests in 0.422s
 OK
 ```
 
+
 ---
+
+## Collaborative Git Workflow
+
+OpenSourceLens is configured for structured, safe multi-developer collaboration between team members and student contributors.
+
+### 1. Repository Setup & Clone
+Each collaborator clones the central repository:
+
+```bash
+git clone https://github.com/kotechameet485-droid/OST-ASSIGMENT-.git
+cd OST-ASSIGMENT-
+```
+
+Verify the configured remote:
+```bash
+git remote -v
+# origin  https://github.com/kotechameet485-droid/OST-ASSIGMENT-.git (fetch)
+# origin  https://github.com/kotechameet485-droid/OST-ASSIGMENT-.git (push)
+```
+
+### 2. Feature-Branch Collaboration Model
+**Important Rule:** Developers must **never** commit directly to the `main` branch. All development takes place in isolated feature branches:
+
+```text
+main (Protected, stable production code)
+ │
+ ├── feature/api-improvements      (Developer 1)
+ ├── feature/analytics-engine      (Developer 2)
+ ├── feature/dashboard-redesign    (Developer 3)
+ └── fix/timeout-handling          (Bugfix)
+```
+
+#### Step-by-Step Developer Flow:
+1. **Sync Local `main` with Remote:**
+   ```bash
+   git checkout main
+   git pull origin main
+   ```
+2. **Create a Dedicated Branch:**
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+3. **Make Local Changes & Run Tests:**
+   ```bash
+   # Ensure all tests pass before committing
+   python manage.py test
+   ```
+4. **Stage & Commit Changes:**
+   ```bash
+   git add .
+   git commit -m "feat: implement descriptive feature title"
+   ```
+5. **Push Feature Branch to GitHub:**
+   ```bash
+   git push -u origin feature/your-feature-name
+   ```
+6. **Open a GitHub Pull Request (PR):**
+   - Navigate to `https://github.com/kotechameet485-droid/OST-ASSIGMENT-`
+   - Click **Compare & pull request**
+   - Provide a clear summary of changes and verify that CI/tests pass
+   - Request review from a teammate
+7. **Merge & Clean Up:**
+   - Once approved, merge into `main` via GitHub
+   - Switch back to `main` locally and pull the fresh merge:
+     ```bash
+     git checkout main
+     git pull origin main
+     git branch -d feature/your-feature-name
+     ```
+
+### 3. Branch Naming Standard
+Use structured, descriptive branch prefixes:
+- `feature/...` — New analytical modules or functionality (e.g. `feature/github-pagination`, `feature/hhi-metric`)
+- `fix/...` — Bug fixes or resilience patches (e.g. `fix/rate-limit-reset`, `fix/timeout-handling`)
+- `refactor/...` — Architecture or code cleanup (e.g. `refactor/analysis-service`)
+- `test/...` — Test suite expansions (e.g. `test/edge-case-repositories`)
+- `ui/...` — Design, CSS, or template enhancements (e.g. `ui/dashboard-dark-accents`)
+- `docs/...` — Documentation updates (e.g. `docs/setup-guide`)
+
+### 4. Commit Message Standard
+Follow Conventional Commits guidelines with clear, meaningful descriptions:
+```text
+feat: add reusable pagination engine to GitHubService
+fix: handle GitHub API 403 rate limits with reset timestamp
+refactor: extract analysis business logic into AnalysisService
+test: add test coverage for 0-issue and 0-PR repositories
+ui: polish health score 5-pillar driver breakdown cards
+docs: document collaborative git workflow and troubleshooting
+chore: update .gitignore rules for environment files
+```
+*Avoid vague messages such as "update", "changes", "fix bugs", "final", or "wip".*
+
+### 5. Managing Collaborator Permissions (Repository Owner)
+To allow teammates to push feature branches and collaborate on GitHub:
+1. The repository owner opens `https://github.com/kotechameet485-droid/OST-ASSIGMENT-`
+2. Navigate to **Settings** $\to$ **Collaborators** $\to$ **Add people**
+3. Enter the teammate's GitHub username or email address and send the invite
+4. The collaborator accepts the invite via email or notifications to receive repository write access
+
+---
+
+## Troubleshooting
+
+### 1. Django Doesn't Start or Reports Migration Issues
+Run Django's built-in system integrity verification:
+```bash
+python manage.py check
+```
+If the database needs updating, apply migrations:
+```bash
+python manage.py migrate
+```
+
+### 2. Port 8000 Is Already in Use (Port Conflict)
+If another application or previous server process is listening on port 8000:
+- **On Windows:**
+  ```powershell
+  netstat -ano | findstr :8000
+  ```
+- **Alternative:** Simply start Django on another port:
+  ```bash
+  python manage.py runserver 8001
+  ```
+  Then access OpenSourceLens at `http://127.0.0.1:8001/`.
+
+### 3. GitHub Authentication in IDE (`Sign in failed: Error: No auth flow succeeded`)
+If your IDE displays an authentication error banner, understand the critical difference between the three distinct authentication layers:
+1. **IDE GitHub Extension Authentication:** An editor-level OAuth flow used for cloud settings sync and GitHub Copilot/extension features. This **does not** impact Git command-line operations or Django functionality.
+2. **Git Command-Line Authentication:** Used by Git on your machine (`git push`, `git pull`). Git uses your OS Credential Manager or GitHub Personal Access Token.
+3. **Django GitHub API Token (`GITHUB_TOKEN` in `.env`):** A server-side token used strictly by Python code to call the public GitHub REST API with a higher rate limit (5,000 requests/hr vs. 60/hr).
+
+**Resolution Steps for IDE Authentication:**
+- Git itself operates independently of the IDE extension. You can always run Git commands directly in the terminal:
+  ```bash
+  git config --global user.name "Your Name"
+  git config --global user.email "your.email@example.com"
+  ```
+- If the GitHub CLI (`gh`) is installed on your system, authenticate safely:
+  ```bash
+  gh auth login
+  # Choose: GitHub.com -> HTTPS -> Login with a web browser
+  ```
+
+### 4. Port Forwarding Messages (`Unable to forward localhost:8000` / `No forwarded ports`)
+- **Local Development:** When developing locally on your own machine (Windows / macOS / Linux), port forwarding is **not required**. Django binds directly to your local loopback address:
+  👉 Open **`http://127.0.0.1:8000/`** directly in your browser.
+- **Remote / Cloud Environments:** If developing inside a remote container, Codespace, or SSH session, configure port forwarding in your IDE's Ports tab to forward port `8000` to your local machine.
+
+---
+
 
 ## Screenshots
 
