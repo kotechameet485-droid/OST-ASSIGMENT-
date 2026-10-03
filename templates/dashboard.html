@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}{{ repo.full_name }} — OpenSourceLens Analytics{% endblock %}
+{% block title %}{{ repo.full_name }} — OpenSourceLens Intelligence Dashboard{% endblock %}
 
 {% block content %}
 <div class="os-dashboard-container py-4">
@@ -18,20 +18,24 @@
                 <span class="text-muted">/</span>
                 <span class="fw-semibold text-dark font-monospace">{{ repo.full_name }}</span>
             </div>
-            <div class="d-flex align-items-center gap-2">
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <!-- Refresh Analysis Button (Section 9) -->
+                <a href="{% url 'analyze' %}?repo={{ repo.full_name }}&window={{ current_window }}&refresh=true" class="btn btn-sm os-btn-secondary" title="Force fresh fetch from GitHub API">
+                    <i class="bi bi-arrow-clockwise me-1"></i> Refresh Analysis
+                </a>
                 <a href="{% url 'compare' %}?repo1={{ repo.full_name }}" class="btn btn-sm os-btn-secondary">
                     <i class="bi bi-intersect me-1"></i> Compare Repository
                 </a>
                 <a href="{% url 'history_detail' owner=repo.owner repo=repo.name %}" class="btn btn-sm os-btn-secondary">
-                    <i class="bi bi-clock-history me-1"></i> View Health History
+                    <i class="bi bi-clock-history me-1"></i> Health Audit Log
                 </a>
                 <a href="{{ repo.url }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm os-btn-outline">
-                    <i class="bi bi-box-arrow-up-right me-1"></i> GitHub
+                    <i class="bi bi-github me-1"></i> View on GitHub <i class="bi bi-box-arrow-up-right ms-1 extra-small"></i>
                 </a>
             </div>
         </div>
 
-        <!-- LEVEL 1: Repository Header Card -->
+        <!-- LEVEL 1: REPOSITORY HEADER CARD (Section 30 & 31) -->
         <div class="card os-repo-header-card border shadow-sm p-4 mb-4">
             <div class="row align-items-center gy-3">
                 <div class="col-lg-8">
@@ -51,52 +55,110 @@
                     <p class="text-secondary mb-3 fs-6">
                         {{ repo.description|default:"No description provided for this repository." }}
                     </p>
+
+                    <!-- Topics badges if available -->
+                    {% if repo.topics %}
+                    <div class="d-flex flex-wrap gap-1 mb-3">
+                        {% for topic in repo.topics %}
+                        <span class="badge bg-light text-primary border font-monospace extra-small">{{ topic }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
                     <div class="d-flex flex-wrap align-items-center gap-3 text-muted small">
                         <span><i class="bi bi-shield-check me-1 text-primary"></i>License: <strong>{{ repo.license }}</strong></span>
                         <span>·</span>
-                        <span><i class="bi bi-git me-1 text-primary"></i>Default branch: <strong>{{ repo.default_branch }}</strong></span>
+                        <span><i class="bi bi-git me-1 text-primary"></i>Branch: <strong>{{ repo.default_branch }}</strong></span>
+                        <span>·</span>
+                        <span><i class="bi bi-code-slash me-1 text-primary"></i>Primary: <strong>{{ repo.language|default:language_dist.primary_language }}</strong></span>
                         <span>·</span>
                         <span><i class="bi bi-calendar-event me-1 text-primary"></i>Created: <strong>{{ repo.created_at|slice:":10" }}</strong></span>
                         <span>·</span>
-                        <span><i class="bi bi-arrow-repeat me-1 text-primary"></i>Last push: <strong>{{ repo.pushed_at|slice:":10" }}</strong></span>
+                        <span><i class="bi bi-arrow-repeat me-1 text-primary"></i>Last push: <strong>{{ repo.pushed_at|slice:":10"|default:repo.updated_at|slice:":10" }}</strong></span>
                     </div>
                 </div>
 
                 <!-- Health Score Hero Summary -->
                 <div class="col-lg-4 text-lg-end">
-                    <div class="d-inline-block text-start border rounded-3 p-3 bg-white shadow-sm" style="min-width: 220px;">
+                    <div class="d-inline-block text-start border rounded-3 p-3 bg-white shadow-xs" style="min-width: 230px;">
                         <div class="d-flex align-items-center justify-content-between gap-3 mb-1">
-                            <span class="text-muted small fw-semibold text-uppercase tracking-wider">Repository Health</span>
+                            <span class="text-muted extra-small fw-semibold text-uppercase tracking-wider">Health Score</span>
                             <span class="badge bg-{{ health.tier_badge }}-subtle text-{{ health.tier_badge }} border border-{{ health.tier_badge }}-subtle">
                                 {{ health.health_tier }}
                             </span>
                         </div>
                         <div class="d-flex align-items-baseline gap-2">
-                            <span class="display-5 fw-bold text-dark">{{ health.total_score }}</span>
+                            <span class="display-5 fw-bold text-dark font-monospace">{{ health.total_score }}</span>
                             <span class="text-muted fs-6">/ 100</span>
                         </div>
-                        <div class="progress os-progress-mini mt-2" style="height: 6px;">
+                        <div class="progress mt-2" style="height: 6px;">
                             <div class="progress-bar bg-{{ health.tier_badge }}" role="progressbar" style="width: {{ health.total_score }}%;" aria-valuenow="{{ health.total_score }}" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                        <div class="text-muted extra-small mt-2">
+                            Analytical Health Index
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Primary Stat Cards Row -->
+        <!-- DATA COVERAGE & SCOPE TRANSPARENCY BANNER (Section 5 & 6) -->
+        <div class="os-coverage-banner mb-4 shadow-xs">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-info-circle-fill text-primary"></i>
+                        <span class="fw-semibold text-dark small">Data Coverage & Scope:</span>
+                    </div>
+                    <div class="d-flex flex-wrap align-items-center gap-2 small text-secondary">
+                        <span class="badge bg-light text-dark border font-monospace">
+                            Period: {{ coverage.window_label }}
+                        </span>
+                        <span class="badge bg-light text-dark border font-monospace">
+                            Based on {{ commit_stats.total_analyzed }} recent commits
+                        </span>
+                        <span class="badge bg-light text-dark border font-monospace">
+                            {{ issue_stats.total_analyzed }} analyzed issues
+                        </span>
+                        <span class="badge bg-light text-dark border font-monospace">
+                            {{ pr_stats.total_analyzed }} analyzed PRs
+                        </span>
+                        <span class="badge bg-light text-dark border font-monospace">
+                            Top {{ contributor_stats.total_recorded }} contributors
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Window Switcher -->
+                <div class="d-flex align-items-center gap-2">
+                    <span class="text-muted extra-small fw-medium">Change Scope:</span>
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Analysis Window Switcher">
+                        <a href="{% url 'analyze' %}?repo={{ repo.full_name }}&window=30d" class="btn {% if current_window == '30d' %}btn-primary{% else %}os-btn-secondary{% endif %} py-0 px-2 extra-small">30D</a>
+                        <a href="{% url 'analyze' %}?repo={{ repo.full_name }}&window=90d" class="btn {% if current_window == '90d' %}btn-primary{% else %}os-btn-secondary{% endif %} py-0 px-2 extra-small">90D</a>
+                        <a href="{% url 'analyze' %}?repo={{ repo.full_name }}&window=180d" class="btn {% if current_window == '180d' %}btn-primary{% else %}os-btn-secondary{% endif %} py-0 px-2 extra-small">6M</a>
+                        <a href="{% url 'analyze' %}?repo={{ repo.full_name }}&window=365d" class="btn {% if current_window == '365d' %}btn-primary{% else %}os-btn-secondary{% endif %} py-0 px-2 extra-small">1Y</a>
+                    </div>
+                    {% if is_cached %}
+                        <span class="badge bg-light text-muted border extra-small" title="Reused from cached snapshot within freshness window">Cached</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- PRIMARY STAT CARDS ROW -->
         <div class="row g-3 mb-4">
             <div class="col-6 col-md-4 col-lg-2">
-                <div class="card h-100 os-metric-card border shadow-sm p-3">
+                <div class="card h-100 os-metric-card border shadow-xs p-3">
                     <div class="d-flex align-items-center justify-content-between mb-2">
                         <span class="text-secondary small fw-medium">Stars</span>
                         <span class="text-warning"><i class="bi bi-star-fill"></i></span>
                     </div>
                     <div class="h3 fw-bold text-dark mb-0 font-monospace">{{ metrics.stars }}</div>
-                    <div class="text-muted extra-small mt-1">Stargazers</div>
+                    <div class="text-muted extra-small mt-1">Total Stargazers</div>
                 </div>
             </div>
             <div class="col-6 col-md-4 col-lg-2">
-                <div class="card h-100 os-metric-card border shadow-sm p-3">
+                <div class="card h-100 os-metric-card border shadow-xs p-3">
                     <div class="d-flex align-items-center justify-content-between mb-2">
                         <span class="text-secondary small fw-medium">Forks</span>
                         <span class="text-info"><i class="bi bi-bezier2"></i></span>
@@ -106,40 +168,40 @@
                 </div>
             </div>
             <div class="col-6 col-md-4 col-lg-2">
-                <div class="card h-100 os-metric-card border shadow-sm p-3">
+                <div class="card h-100 os-metric-card border shadow-xs p-3">
                     <div class="d-flex align-items-center justify-content-between mb-2">
                         <span class="text-secondary small fw-medium">Watchers</span>
                         <span class="text-primary"><i class="bi bi-eye-fill"></i></span>
                     </div>
                     <div class="h3 fw-bold text-dark mb-0 font-monospace">{{ metrics.watchers }}</div>
-                    <div class="text-muted extra-small mt-1">Subscribers</div>
+                    <div class="text-muted extra-small mt-1">Direct subscribers</div>
                 </div>
             </div>
             <div class="col-6 col-md-4 col-lg-2">
-                <div class="card h-100 os-metric-card border shadow-sm p-3">
+                <div class="card h-100 os-metric-card border shadow-xs p-3">
                     <div class="d-flex align-items-center justify-content-between mb-2">
                         <span class="text-secondary small fw-medium">Open Issues</span>
                         <span class="text-danger"><i class="bi bi-exclamation-circle-fill"></i></span>
                     </div>
                     <div class="h3 fw-bold text-dark mb-0 font-monospace">{{ metrics.open_issues }}</div>
-                    <div class="text-muted extra-small mt-1">Active backlog</div>
+                    <div class="text-muted extra-small mt-1">Repo active backlog</div>
                 </div>
             </div>
             <div class="col-6 col-md-4 col-lg-2">
-                <div class="card h-100 os-metric-card border shadow-sm p-3">
+                <div class="card h-100 os-metric-card border shadow-xs p-3">
                     <div class="d-flex align-items-center justify-content-between mb-2">
                         <span class="text-secondary small fw-medium">Commits</span>
                         <span class="text-success"><i class="bi bi-git"></i></span>
                     </div>
                     <div class="h3 fw-bold text-dark mb-0 font-monospace">{{ metrics.commits_analyzed }}</div>
-                    <div class="text-muted extra-small mt-1">Analyzed in sample</div>
+                    <div class="text-muted extra-small mt-1">Sample in {{ coverage.window_label }}</div>
                 </div>
             </div>
             <div class="col-6 col-md-4 col-lg-2">
-                <div class="card h-100 os-metric-card border shadow-sm p-3">
+                <div class="card h-100 os-metric-card border shadow-xs p-3">
                     <div class="d-flex align-items-center justify-content-between mb-2">
                         <span class="text-secondary small fw-medium">Contributors</span>
-                        <span class="text-purple"><i class="bi bi-people-fill text-primary"></i></span>
+                        <span class="text-primary"><i class="bi bi-people-fill"></i></span>
                     </div>
                     <div class="h3 fw-bold text-dark mb-0 font-monospace">{{ metrics.contributors_recorded }}</div>
                     <div class="text-muted extra-small mt-1">Recorded base</div>
@@ -147,7 +209,7 @@
             </div>
         </div>
 
-        <!-- 5-PILLAR HEALTH SCORE BREAKDOWN -->
+        <!-- 5-PILLAR HEALTH SCORE BREAKDOWN (Section 14-22) -->
         <div class="card border shadow-sm p-4 mb-4">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
                 <div>
@@ -155,7 +217,7 @@
                         <i class="bi bi-shield-check text-primary"></i>
                         5-Pillar Health Score Breakdown
                     </h2>
-                    <p class="text-secondary small mb-0">Deterministic maintainability index evaluated across 5 weighted pillars</p>
+                    <p class="text-secondary small mb-0">Deterministic maintainability index evaluated across 5 weighted dimensions</p>
                 </div>
                 <button class="btn btn-sm os-btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#methodologyCollapse" aria-expanded="false" aria-controls="methodologyCollapse">
                     <i class="bi bi-question-circle me-1"></i> Methodology Details
@@ -166,10 +228,10 @@
             <div class="row g-3">
                 {% for comp in health.components %}
                 <div class="col-md-6 col-lg">
-                    <div class="p-3 bg-light rounded-3 border h-100">
+                    <div class="os-pillar-card">
                         <div class="d-flex justify-content-between align-items-center mb-1">
                             <span class="fw-semibold text-dark small">{{ comp.name }}</span>
-                            <span class="badge bg-white text-secondary border extra-small">{{ comp.weight }}</span>
+                            <span class="badge bg-white text-secondary border extra-small font-monospace">{{ comp.weight }}</span>
                         </div>
                         <div class="d-flex align-items-baseline gap-1 my-1">
                             <span class="h4 fw-bold text-dark mb-0 font-monospace">{{ comp.score }}</span>
@@ -178,7 +240,17 @@
                         <div class="progress mb-2" style="height: 6px;">
                             <div class="progress-bar {% if comp.score >= 80 %}bg-success{% elif comp.score >= 60 %}bg-primary{% elif comp.score >= 40 %}bg-warning{% else %}bg-danger{% endif %}" role="progressbar" style="width: {{ comp.score }}%;"></div>
                         </div>
-                        <div class="text-muted extra-small text-truncate-2">{{ comp.description }}</div>
+                        <div class="text-muted extra-small mb-2 text-truncate-2">{{ comp.description }}</div>
+                        {% if comp.signals %}
+                        <div class="border-top pt-2">
+                            <span class="extra-small fw-semibold text-dark d-block mb-1">Drivers:</span>
+                            <ul class="list-unstyled mb-0 extra-small text-muted">
+                                {% for s in comp.signals %}
+                                <li class="mb-1"><i class="bi bi-check2 text-primary me-1"></i>{{ s }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
                 {% endfor %}
@@ -186,15 +258,18 @@
 
             <!-- Expandable Methodology Panel (Section 21) -->
             <div class="collapse mt-3" id="methodologyCollapse">
-                <div class="card card-body bg-light border-0 small text-secondary">
+                <div class="card card-body bg-light border small text-secondary">
                     <h6 class="fw-bold text-dark mb-2">How is this calculated?</h6>
-                    <ul class="mb-0 ps-3">
-                        <li class="mb-1"><strong>Activity (25%):</strong> Evaluates commit recency (days since latest commit) and push cadence. Active commits in the last 7 days receive top scores.</li>
-                        <li class="mb-1"><strong>Issue Management (20%):</strong> Calculated as <code>Resolution Rate = (Closed Issues / Total Issues Analyzed) × 100</code>, factoring in unresolved issues aged >90 days.</li>
-                        <li class="mb-1"><strong>PR Activity (20%):</strong> Calculated as <code>Merge Rate = (Merged PRs / Total PRs Analyzed) × 100</code>, factoring in review turnaround duration.</li>
-                        <li class="mb-1"><strong>Contributor Diversity (15%):</strong> Analyzes contributor volume and contribution distribution concentration (resilience against maintainer churn).</li>
-                        <li><strong>Maintenance & Hygiene (20%):</strong> Validates official open-source license presence, project purpose description, and non-archived status.</li>
+                    <ul class="mb-2 ps-3">
+                        <li class="mb-1"><strong>Activity (25% Weight):</strong> Evaluates commit recency (days since latest push) and commit velocity (commits/day). Repositories pushed within 3-7 days receive top marks.</li>
+                        <li class="mb-1"><strong>Issue Management (20% Weight):</strong> Calculated from sample resolution rate, median resolution days (robust against long-open outliers), and open backlog ratio.</li>
+                        <li class="mb-1"><strong>PR Activity (20% Weight):</strong> Calculated from pull request merge rate and turnaround velocity for merged contributions.</li>
+                        <li class="mb-1"><strong>Contributor Diversity (15% Weight):</strong> Evaluates maintainer volume and maintainer concentration via the Herfindahl-Hirschman Index (HHI = &Sigma; share&sup2;).</li>
+                        <li class="mb-1"><strong>Maintenance & Hygiene (20% Weight):</strong> Validates documented open-source license presence, project purpose description, topics, and non-archived status.</li>
                     </ul>
+                    <div class="p-2 border rounded bg-white text-muted extra-small">
+                        <i class="bi bi-info-circle me-1 text-primary"></i><strong>Disclaimer:</strong> {{ health.disclaimer }}
+                    </div>
                 </div>
             </div>
 
@@ -205,7 +280,7 @@
                 <div class="d-flex flex-wrap gap-2">
                     {% for item in health.rationale %}
                     <span class="badge bg-light text-secondary border px-2 py-1 small fw-normal">
-                        <i class="bi bi-info-circle text-primary me-1"></i>{{ item }}
+                        <i class="bi bi-check-circle-fill text-primary me-1"></i>{{ item }}
                     </span>
                     {% endfor %}
                 </div>
@@ -213,7 +288,7 @@
             {% endif %}
         </div>
 
-        <!-- LEVEL 2: COMMIT ACTIVITY & TIME-SERIES TRENDS -->
+        <!-- LEVEL 2: COMMIT ACTIVITY & TIME-SERIES TRENDS (Section 23) -->
         <div class="card border shadow-sm p-4 mb-4">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
                 <div>
@@ -224,11 +299,12 @@
                     <p class="text-secondary small mb-0">Commit cadence aggregated through Pandas across customizable historical windows</p>
                 </div>
 
-                <!-- Time Filter Controls (Section 24) -->
+                <!-- Time Filter Controls -->
                 <div class="btn-group btn-group-sm" role="group" aria-label="Commit Time Range">
                     <button type="button" class="btn btn-outline-primary active" id="btn-trend-30d" onclick="switchCommitRange('30d')">Last 30 Days</button>
                     <button type="button" class="btn btn-outline-primary" id="btn-trend-90d" onclick="switchCommitRange('90d')">Last 90 Days</button>
                     <button type="button" class="btn btn-outline-primary" id="btn-trend-6m" onclick="switchCommitRange('6m')">Last 6 Months</button>
+                    <button type="button" class="btn btn-outline-primary" id="btn-trend-1y" onclick="switchCommitRange('1y')">Last 1 Year</button>
                 </div>
             </div>
 
@@ -262,11 +338,19 @@
 
             <!-- Commit Trend Line/Area Chart Canvas -->
             <div class="position-relative" style="height: 260px;">
-                <canvas id="commitTrendChart"></canvas>
+                {% if commit_stats.total_analyzed > 0 %}
+                    <canvas id="commitTrendChart"></canvas>
+                {% else %}
+                    <div class="h-100 d-flex flex-column align-items-center justify-content-center text-muted border rounded bg-light">
+                        <i class="bi bi-inbox fs-2 mb-2 text-muted"></i>
+                        <span class="fw-semibold text-dark">No commit data available for this period.</span>
+                        <span class="small">Try selecting a broader analysis window or verify repository commits.</span>
+                    </div>
+                {% endif %}
             </div>
         </div>
 
-        <!-- LEVEL 2: ISSUES & PULL REQUESTS ANALYTICS (SIDE-BY-SIDE) -->
+        <!-- LEVEL 2: ISSUES & PULL REQUESTS ANALYTICS (SIDE-BY-SIDE) (Section 24 & 25) -->
         <div class="row g-4 mb-4">
 
             <!-- Issue Analytics Card -->
@@ -295,9 +379,9 @@
                         </div>
                         <div class="col-4">
                             <div class="p-2 border rounded-2 bg-light text-center">
-                                <div class="text-muted extra-small">Avg Resolution Time</div>
+                                <div class="text-muted extra-small">Median Close Time</div>
                                 <div class="h5 fw-bold text-dark mb-0 font-monospace">
-                                    {% if issue_stats.avg_resolution_days %}{{ issue_stats.avg_resolution_days }} d{% else %}N/A{% endif %}
+                                    {% if issue_stats.median_resolution_days %}{{ issue_stats.median_resolution_days }} d{% else %}N/A{% endif %}
                                 </div>
                             </div>
                         </div>
@@ -314,9 +398,10 @@
                         {% if issue_stats.trend_labels %}
                             <canvas id="issuesChart"></canvas>
                         {% else %}
-                            <div class="h-100 d-flex flex-column align-items-center justify-content-center text-muted">
+                            <div class="h-100 d-flex flex-column align-items-center justify-content-center text-muted border rounded bg-light">
                                 <i class="bi bi-inbox fs-3 mb-2"></i>
-                                <span class="small">Insufficient issue history for monthly comparison</span>
+                                <span class="small fw-semibold text-dark">Insufficient issue history for monthly comparison.</span>
+                                <span class="extra-small text-muted">No monthly opened/closed trend available.</span>
                             </div>
                         {% endif %}
                     </div>
@@ -349,7 +434,7 @@
                         </div>
                         <div class="col-4">
                             <div class="p-2 border rounded-2 bg-light text-center">
-                                <div class="text-muted extra-small">Avg Merge Time</div>
+                                <div class="text-muted extra-small">Median Merge Time</div>
                                 <div class="h5 fw-bold text-dark mb-0 font-monospace">{{ pr_stats.avg_merge_time_display }}</div>
                             </div>
                         </div>
@@ -366,9 +451,9 @@
                         {% if pr_stats.total_analyzed > 0 %}
                             <canvas id="prsChart"></canvas>
                         {% else %}
-                            <div class="h-100 d-flex flex-column align-items-center justify-content-center text-muted">
+                            <div class="h-100 d-flex flex-column align-items-center justify-content-center text-muted border rounded bg-light">
                                 <i class="bi bi-inbox fs-3 mb-2"></i>
-                                <span class="small">No pull request activity recorded in this repository</span>
+                                <span class="small fw-semibold text-dark">No pull request activity recorded in this repository.</span>
                             </div>
                         {% endif %}
                     </div>
@@ -377,7 +462,7 @@
 
         </div>
 
-        <!-- LEVEL 2: CONTRIBUTORS & DISTRIBUTION LEADERBOARD -->
+        <!-- LEVEL 2: CONTRIBUTORS & DISTRIBUTION LEADERBOARD (Section 18 & 26) -->
         <div class="card border shadow-sm p-4 mb-4">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
                 <div>
@@ -387,12 +472,15 @@
                     </h2>
                     <p class="text-secondary small mb-0">Community depth and maintainer dependency analysis</p>
                 </div>
-                <div class="d-flex align-items-center gap-2">
-                    <span class="badge bg-light text-secondary border">
-                        Top 1 Contributor Share: <strong class="font-monospace">{{ contributor_stats.top1_share }}%</strong>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="badge bg-light text-secondary border font-monospace">
+                        Top 1 Share: <strong>{{ contributor_stats.top1_share }}%</strong>
                     </span>
-                    <span class="badge bg-light text-secondary border">
-                        Top 5 Share: <strong class="font-monospace">{{ contributor_stats.top5_share }}%</strong>
+                    <span class="badge bg-light text-secondary border font-monospace">
+                        Top 5 Share: <strong>{{ contributor_stats.top5_share }}%</strong>
+                    </span>
+                    <span class="badge bg-light text-primary border font-monospace" title="Herfindahl-Hirschman Index (Sum of squared percentage shares)">
+                        HHI: <strong>{{ contributor_stats.hhi }}</strong> ({{ contributor_stats.concentration_label }})
                     </span>
                 </div>
             </div>
@@ -422,7 +510,7 @@
                                             <i class="bi bi-person text-secondary"></i>
                                         </div>
                                     {% endif %}
-                                    <span class="fw-semibold text-dark">{{ c.username }}</span>
+                                    <span class="fw-semibold text-dark font-monospace">{{ c.username }}</span>
                                 </div>
                             </td>
                             <td class="text-end font-monospace fw-semibold">{{ c.contributions }}</td>
@@ -452,7 +540,7 @@
             </div>
         </div>
 
-        <!-- LEVEL 2: PROGRAMMING LANGUAGES BREAKDOWN -->
+        <!-- LEVEL 2: PROGRAMMING LANGUAGES BREAKDOWN (Section 26) -->
         <div class="card border shadow-sm p-4 mb-4">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
                 <div>
@@ -464,7 +552,7 @@
                 </div>
                 <div class="d-flex align-items-center gap-2">
                     <span class="badge bg-light text-primary border">Primary: <strong>{{ language_dist.primary_language }}</strong></span>
-                    <span class="badge bg-light text-secondary border">Total: <strong>{{ language_dist.total_bytes_formatted }}</strong></span>
+                    <span class="badge bg-light text-secondary border font-monospace">Total: <strong>{{ language_dist.total_bytes_formatted }}</strong></span>
                 </div>
             </div>
 
@@ -474,9 +562,9 @@
                         {% if language_dist.items %}
                             <canvas id="languagesChart"></canvas>
                         {% else %}
-                            <div class="h-100 d-flex flex-column align-items-center justify-content-center text-muted">
+                            <div class="h-100 d-flex flex-column align-items-center justify-content-center text-muted border rounded bg-light">
                                 <i class="bi bi-inbox fs-3 mb-2"></i>
-                                <span class="small">No language data recorded</span>
+                                <span class="small fw-semibold text-dark">No language data returned by GitHub.</span>
                             </div>
                         {% endif %}
                     </div>
@@ -521,8 +609,7 @@
             </div>
         </div>
 
-        <!-- LEVEL 3: HISTORICAL HEALTH SCORE TREND (Section 30) -->
-        {% if health_trend.has_trend %}
+        <!-- LEVEL 3: HISTORICAL HEALTH SCORE TREND (Section 28 & 30) -->
         <div class="card border shadow-sm p-4 mb-4">
             <div class="d-flex align-items-center justify-content-between mb-3">
                 <div>
@@ -536,11 +623,19 @@
                     View Complete Audit Log <i class="bi bi-arrow-right ms-1"></i>
                 </a>
             </div>
+
             <div class="position-relative" style="height: 220px;">
-                <canvas id="healthTrendChart"></canvas>
+                {% if health_trend.has_trend %}
+                    <canvas id="healthTrendChart"></canvas>
+                {% else %}
+                    <div class="h-100 d-flex flex-column align-items-center justify-content-center text-muted border rounded bg-light">
+                        <i class="bi bi-info-circle fs-3 mb-2 text-primary"></i>
+                        <span class="fw-semibold text-dark">Not enough historical snapshots to generate a trend.</span>
+                        <span class="small">Click "Refresh Analysis" over time to record multiple health score snapshots.</span>
+                    </div>
+                {% endif %}
             </div>
         </div>
-        {% endif %}
 
     </div>
 </div>
@@ -568,7 +663,7 @@
     const commitCtx = document.getElementById('commitTrendChart');
     let commitChart = null;
 
-    if (commitCtx) {
+    if (commitCtx && commitTrendPayload.labels_30d) {
         commitChart = new Chart(commitCtx, {
             type: 'line',
             data: {
@@ -607,13 +702,15 @@
         });
     }
 
-    // Filter toggles for Commit Trend (30d / 90d / 6m)
+    // Interactive Switch for Commit Time Windows
     function switchCommitRange(range) {
         if (!commitChart) return;
-        ['30d', '90d', '6m'].forEach(r => {
+
+        ['30d', '90d', '6m', '1y'].forEach(r => {
             const btn = document.getElementById(`btn-trend-${r}`);
             if (btn) btn.classList.remove('active');
         });
+
         const activeBtn = document.getElementById(`btn-trend-${range}`);
         if (activeBtn) activeBtn.classList.add('active');
 
@@ -626,11 +723,14 @@
         } else if (range === '6m') {
             commitChart.data.labels = commitTrendPayload.labels_6m;
             commitChart.data.datasets[0].data = commitTrendPayload.data_6m;
+        } else if (range === '1y') {
+            commitChart.data.labels = commitTrendPayload.labels_1y || commitTrendPayload.labels_6m;
+            commitChart.data.datasets[0].data = commitTrendPayload.data_1y || commitTrendPayload.data_6m;
         }
         commitChart.update();
     }
 
-    // 2. Issues Opened vs Closed Bar Chart
+    // 2. Issues Opened vs Closed Chart
     const issuesCtx = document.getElementById('issuesChart');
     if (issuesCtx && issuesTrendPayload.labels && issuesTrendPayload.labels.length > 0) {
         new Chart(issuesCtx, {
@@ -656,7 +756,7 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+                    legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
                 },
                 scales: {
                     x: { grid: { display: false } },
@@ -666,16 +766,16 @@
         });
     }
 
-    // 3. PR Status Doughnut Chart
+    // 3. PR Status Breakdown (Doughnut Chart)
     const prsCtx = document.getElementById('prsChart');
-    if (prsCtx && prsStatusPayload.data) {
+    if (prsCtx && prsStatusPayload.data && prsStatusPayload.data.some(v => v > 0)) {
         new Chart(prsCtx, {
             type: 'doughnut',
             data: {
                 labels: prsStatusPayload.labels,
                 datasets: [{
                     data: prsStatusPayload.data,
-                    backgroundColor: ['#2563eb', '#38bdf8', '#cbd5e1'],
+                    backgroundColor: ['#2563eb', '#06b6d4', '#94a3b8'],
                     borderWidth: 2,
                     borderColor: '#ffffff',
                 }]
@@ -683,18 +783,18 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: {
-                    legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
-                },
                 cutout: '68%',
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 12, padding: 12, font: { size: 11 } } },
+                }
             }
         });
     }
 
-    // 4. Languages Doughnut Chart
-    const langsCtx = document.getElementById('languagesChart');
-    if (langsCtx && languagesPayload.data && languagesPayload.data.length > 0) {
-        new Chart(langsCtx, {
+    // 4. Languages Breakdown (Donut Chart)
+    const langCtx = document.getElementById('languagesChart');
+    if (langCtx && languagesPayload.data && languagesPayload.data.length > 0) {
+        new Chart(langCtx, {
             type: 'doughnut',
             data: {
                 labels: languagesPayload.labels,
@@ -708,15 +808,15 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                cutout: '72%',
                 plugins: {
                     legend: { display: false },
-                },
-                cutout: '68%',
+                }
             }
         });
     }
 
-    // 5. Health Trend Line Chart (if historical data exists)
+    // 5. Historical Health Score Progression Chart
     const healthCtx = document.getElementById('healthTrendChart');
     if (healthCtx && healthTrendPayload.scores && healthTrendPayload.scores.length > 1) {
         new Chart(healthCtx, {
@@ -726,10 +826,10 @@
                 datasets: [{
                     label: 'Health Score',
                     data: healthTrendPayload.scores,
-                    borderColor: '#10b981',
-                    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                    borderColor: '#2563eb',
+                    backgroundColor: 'rgba(37, 99, 235, 0.08)',
                     borderWidth: 2,
-                    pointBackgroundColor: '#10b981',
+                    pointBackgroundColor: '#2563eb',
                     pointRadius: 4,
                     fill: true,
                     tension: 0.2,
@@ -738,9 +838,6 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                },
                 scales: {
                     y: {
                         min: 0,

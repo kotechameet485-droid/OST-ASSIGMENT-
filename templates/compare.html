@@ -7,15 +7,15 @@
 <div class="py-5">
     <div class="container-xl">
         <div class="text-center mb-5">
-            <span class="badge bg-light text-primary border px-3 py-1 mb-2">Comparative Intelligence</span>
+            <span class="badge bg-light text-primary border px-3 py-1 mb-2 font-monospace">Comparative Intelligence</span>
             <h1 class="display-6 fw-bold text-dark mb-2">Public Repository Comparison</h1>
             <p class="text-secondary max-w-2xl mx-auto">
-                Compare measurable engineering velocity, health scores, and community metrics across up to three public GitHub projects.
+                Compare measurable engineering velocity, health scores, and community metrics across up to three public GitHub projects. Strictly objective analysis without declaring winners or subjective rankings.
             </p>
         </div>
 
         <!-- Comparison Input Form Card -->
-        <div class="card border shadow-sm p-4 mb-5">
+        <div class="card border shadow-xs p-4 mb-5">
             <form method="GET" action="{% url 'compare' %}">
                 <div class="row g-3 align-items-end">
                     <div class="col-md-4">
@@ -54,6 +54,20 @@
         </div>
 
         {% if comparison %}
+            <!-- Visual Grouped Comparison Chart Card (Section 29) -->
+            <div class="card border shadow-sm p-4 mb-4">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <h2 class="h6 fw-bold text-dark mb-0 d-flex align-items-center gap-2">
+                        <i class="bi bi-bar-chart-fill text-primary"></i>
+                        Side-by-Side Telemetry Overview
+                    </h2>
+                    <span class="badge bg-light text-secondary border font-monospace">Objective Measurement</span>
+                </div>
+                <div class="position-relative" style="height: 280px;">
+                    <canvas id="compareGroupedChart"></canvas>
+                </div>
+            </div>
+
             <!-- Side-by-Side Comparison Matrix Card -->
             <div class="card border shadow-sm mb-5">
                 <div class="p-3 border-bottom bg-light d-flex justify-content-between align-items-center">
@@ -61,7 +75,7 @@
                         <i class="bi bi-table text-primary"></i>
                         Comparative Metrics Matrix
                     </h2>
-                    <span class="text-muted extra-small">Objective Telemetry Comparison</span>
+                    <span class="text-muted extra-small">Factual Telemetry Only — No Subjective Ranking</span>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0">
@@ -80,7 +94,7 @@
                         </thead>
                         <tbody>
                             <!-- Health Score -->
-                            <tr class="table-subtle-primary">
+                            <tr class="table-light">
                                 <td class="fw-bold text-dark">
                                     <i class="bi bi-shield-check text-primary me-2"></i>Health Score (0–100)
                                 </td>
@@ -120,61 +134,77 @@
                                     <i class="bi bi-exclamation-circle-fill text-danger me-2"></i>Open Issues
                                 </td>
                                 {% for r in comparison.repositories %}
-                                    <td class="text-center font-monospace text-secondary">{{ r.open_issues_formatted }}</td>
+                                    <td class="text-center font-monospace text-danger">{{ r.open_issues_formatted }}</td>
                                 {% endfor %}
                             </tr>
 
-                            <!-- 5 Pillars -->
+                            <!-- Activity Score -->
                             <tr>
-                                <td class="text-secondary small ps-4">Activity Score (25%)</td>
+                                <td class="fw-semibold text-secondary">
+                                    <i class="bi bi-activity text-success me-2"></i>Activity Score (25%)
+                                </td>
                                 {% for r in comparison.repositories %}
-                                    <td class="text-center font-monospace">{{ r.activity_score }}</td>
+                                    <td class="text-center font-monospace">{{ r.activity_score }} / 100</td>
                                 {% endfor %}
                             </tr>
+
+                            <!-- Issue Mgmt Score -->
                             <tr>
-                                <td class="text-secondary small ps-4">Issue Management (20%)</td>
+                                <td class="fw-semibold text-secondary">
+                                    <i class="bi bi-check2-circle text-primary me-2"></i>Issue Mgmt Score (20%)
+                                </td>
                                 {% for r in comparison.repositories %}
-                                    <td class="text-center font-monospace">{{ r.issue_score }}</td>
+                                    <td class="text-center font-monospace">{{ r.issue_score }} / 100</td>
                                 {% endfor %}
                             </tr>
+
+                            <!-- PR Activity Score -->
                             <tr>
-                                <td class="text-secondary small ps-4">PR Activity (20%)</td>
+                                <td class="fw-semibold text-secondary">
+                                    <i class="bi bi-sign-merge-right text-info me-2"></i>PR Activity Score (20%)
+                                </td>
                                 {% for r in comparison.repositories %}
-                                    <td class="text-center font-monospace">{{ r.pr_score }}</td>
+                                    <td class="text-center font-monospace">{{ r.pr_score }} / 100</td>
                                 {% endfor %}
                             </tr>
+
+                            <!-- Contributor Diversity Score -->
                             <tr>
-                                <td class="text-secondary small ps-4">Contributor Diversity (15%)</td>
+                                <td class="fw-semibold text-secondary">
+                                    <i class="bi bi-people-fill text-primary me-2"></i>Diversity Score (15%)
+                                </td>
                                 {% for r in comparison.repositories %}
-                                    <td class="text-center font-monospace">{{ r.contributor_score }}</td>
+                                    <td class="text-center font-monospace">{{ r.contributor_score }} / 100</td>
                                 {% endfor %}
                             </tr>
+
+                            <!-- Maintenance Score -->
                             <tr>
-                                <td class="text-secondary small ps-4">Maintenance & Hygiene (20%)</td>
+                                <td class="fw-semibold text-secondary">
+                                    <i class="bi bi-tools text-secondary me-2"></i>Maintenance Score (20%)
+                                </td>
                                 {% for r in comparison.repositories %}
-                                    <td class="text-center font-monospace">{{ r.maintenance_score }}</td>
+                                    <td class="text-center font-monospace">{{ r.maintenance_score }} / 100</td>
                                 {% endfor %}
                             </tr>
 
                             <!-- Primary Language -->
                             <tr>
                                 <td class="fw-semibold text-secondary">
-                                    <i class="bi bi-code-square text-primary me-2"></i>Primary Language
+                                    <i class="bi bi-code-slash text-primary me-2"></i>Primary Language
                                 </td>
                                 {% for r in comparison.repositories %}
-                                    <td class="text-center">
-                                        <span class="badge bg-light text-secondary border font-monospace">{{ r.primary_language }}</span>
-                                    </td>
+                                    <td class="text-center font-monospace">{{ r.primary_language }}</td>
                                 {% endfor %}
                             </tr>
 
                             <!-- License -->
                             <tr>
                                 <td class="fw-semibold text-secondary">
-                                    <i class="bi bi-shield text-muted me-2"></i>License
+                                    <i class="bi bi-shield-check text-success me-2"></i>License
                                 </td>
                                 {% for r in comparison.repositories %}
-                                    <td class="text-center text-muted small">{{ r.license }}</td>
+                                    <td class="text-center small">{{ r.license }}</td>
                                 {% endfor %}
                             </tr>
                         </tbody>
@@ -182,30 +212,30 @@
                 </div>
             </div>
 
-            <!-- Visual Bar Comparison Charts -->
-            <div class="row g-4 mb-4">
-                <div class="col-lg-6">
-                    <div class="card h-100 border shadow-sm p-4">
-                        <h3 class="h6 fw-bold text-dark mb-1">Stars & Community Scale Comparison</h3>
-                        <p class="text-secondary extra-small mb-3">Comparing stargazers across selected projects</p>
-                        <div class="position-relative" style="height: 240px;">
-                            <canvas id="compareStarsChart"></canvas>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-lg-6">
-                    <div class="card h-100 border shadow-sm p-4">
-                        <h3 class="h6 fw-bold text-dark mb-1">Health Score Comparison</h3>
-                        <p class="text-secondary extra-small mb-3">Comparing multi-pillar health scores (0–100)</p>
-                        <div class="position-relative" style="height: 240px;">
-                            <canvas id="compareHealthChart"></canvas>
-                        </div>
-                    </div>
+            <!-- Factual Measured Differences Summary (Section 29) -->
+            <div class="card border bg-light p-4 mb-4">
+                <h3 class="h6 fw-bold text-dark mb-2 d-flex align-items-center gap-2">
+                    <i class="bi bi-info-circle text-primary"></i>
+                    Measured Observations
+                </h3>
+                <ul class="mb-0 small text-secondary ps-3">
+                    {% for r in comparison.repositories %}
+                    <li class="mb-1">
+                        <strong>{{ r.name }}</strong> presents {{ r.stars_formatted }} stars, {{ r.forks_formatted }} forks, and a health score of {{ r.health_score }}/100 with primary language {{ r.primary_language }}.
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% elif candidates %}
+            <div class="alert alert-warning border shadow-xs d-flex align-items-center gap-2">
+                <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+                <div>
+                    Please provide at least 2 valid repositories to generate a side-by-side comparison.
                 </div>
             </div>
         {% else %}
             <!-- Initial Empty State -->
-            <div class="card border shadow-sm p-5 text-center bg-white">
+            <div class="card border shadow-xs p-5 text-center bg-white">
                 <div class="py-4">
                     <i class="bi bi-intersect fs-1 text-muted d-block mb-3"></i>
                     <h3 class="h5 fw-bold text-dark mb-2">Select Repositories to Compare</h3>
@@ -223,54 +253,33 @@
 {% if chart_json %}
 <script>
     const compData = {{ chart_json|safe }};
-
-    // 1. Stars Comparison Bar Chart
-    const starsCtx = document.getElementById('compareStarsChart');
-    if (starsCtx) {
-        new Chart(starsCtx, {
+    const ctx = document.getElementById('compareGroupedChart');
+    if (ctx) {
+        new Chart(ctx, {
             type: 'bar',
             data: {
                 labels: compData.labels,
-                datasets: [{
-                    label: 'Stars',
-                    data: compData.stars,
-                    backgroundColor: '#f59e0b',
-                    borderRadius: 4,
-                }]
+                datasets: [
+                    {
+                        label: 'Health Score (0-100)',
+                        data: compData.health,
+                        backgroundColor: '#2563eb',
+                        borderRadius: 4,
+                    }
+                ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
                 scales: {
-                    x: { grid: { display: false } },
-                    y: { beginAtZero: true, grid: { color: '#f1f5f9' } }
-                }
-            }
-        });
-    }
-
-    // 2. Health Score Comparison Bar Chart
-    const healthCtx = document.getElementById('compareHealthChart');
-    if (healthCtx) {
-        new Chart(healthCtx, {
-            type: 'bar',
-            data: {
-                labels: compData.labels,
-                datasets: [{
-                    label: 'Health Score',
-                    data: compData.health,
-                    backgroundColor: '#2563eb',
-                    borderRadius: 4,
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: { grid: { display: false } },
-                    y: { min: 0, max: 100, grid: { color: '#f1f5f9' } }
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        grid: { color: '#f1f5f9' },
+                    },
+                    x: {
+                        grid: { display: false },
+                    }
                 }
             }
         });

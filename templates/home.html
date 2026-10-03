@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}OpenSourceLens — Understand Any Open-Source Repository{% endblock %}
+{% block title %}OpenSourceLens — Repository Intelligence & Health Analytics{% endblock %}
 
 {% block content %}
 <div class="os-hero-section py-5">
@@ -21,53 +21,70 @@
 
                 <!-- Supporting Text -->
                 <p class="lead text-secondary mb-4 mx-auto" style="max-width: 680px;">
-                    Analyze GitHub projects through repository activity, development metrics, contributors,
-                    issues, pull requests, and maintenance signals.
+                    Transform public GitHub telemetry into transparent maintainability signals, development cadence, issue triage velocity, and maintainer distribution.
                 </p>
 
                 <!-- Search Card -->
-                <div class="card os-search-card shadow-sm border p-3 p-md-4 mb-4 text-start" id="search-section">
+                <div class="card os-search-card shadow-sm p-3 p-md-4 mb-4 text-start" id="search-section">
                     <form action="{% url 'analyze' %}" method="POST" id="repoSearchForm">
                         {% csrf_token %}
-                        <label for="repoSearchInput" class="form-label fw-semibold text-dark small mb-2">
-                            Enter GitHub Repository
-                        </label>
-                        <div class="input-group input-group-lg os-input-group mb-2">
-                            <span class="input-group-text os-input-icon bg-white border-end-0">
-                                <i class="bi bi-github text-muted"></i>
-                            </span>
-                            <input 
-                                type="text" 
-                                name="repository" 
-                                id="repoSearchInput" 
-                                class="form-control border-start-0 ps-0 os-search-input" 
-                                placeholder="owner/repository (e.g. facebook/react)" 
-                                required
-                                spellcheck="false"
-                                autocomplete="off"
-                            >
-                            <button type="submit" class="btn os-btn-primary px-4 fw-semibold d-flex align-items-center gap-2" id="submitBtn">
-                                <span class="btn-text">Analyze Repository</span>
-                                <i class="bi bi-arrow-right"></i>
-                            </button>
+                        <div class="row g-2 mb-2">
+                            <div class="col-md-8">
+                                <label for="repoSearchInput" class="form-label fw-semibold text-dark small mb-1">
+                                    GitHub Repository
+                                </label>
+                                <div class="input-group input-group-lg os-input-group">
+                                    <span class="input-group-text os-input-icon bg-white border-end-0">
+                                        <i class="bi bi-github text-muted"></i>
+                                    </span>
+                                    <input 
+                                        type="text" 
+                                        name="repository" 
+                                        id="repoSearchInput" 
+                                        class="form-control border-start-0 ps-0 os-search-input" 
+                                        placeholder="owner/repository (e.g. facebook/react)" 
+                                        required
+                                        spellcheck="false"
+                                        autocomplete="off"
+                                    >
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="analysisWindowSelect" class="form-label fw-semibold text-dark small mb-1">
+                                    Analysis Scope
+                                </label>
+                                <div class="d-flex gap-2">
+                                    <select name="window" id="analysisWindowSelect" class="form-select form-select-lg os-window-select font-monospace">
+                                        <option value="30d">Last 30 Days</option>
+                                        <option value="90d" selected>Last 90 Days</option>
+                                        <option value="180d">Last 6 Months</option>
+                                        <option value="365d">Last 1 Year</option>
+                                    </select>
+                                    <button type="submit" class="btn os-btn-primary px-3 fw-semibold d-flex align-items-center gap-2 flex-shrink-0" id="submitBtn">
+                                        <span>Analyze</span>
+                                        <i class="bi bi-arrow-right"></i>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                        <div id="clientValidationError" class="text-danger small mt-1 d-none">
+
+                        <div id="clientValidationError" class="text-danger small mt-2 d-none">
                             <i class="bi bi-exclamation-circle me-1"></i>
                             <span>Invalid repository format. Expected: owner/repository (e.g. facebook/react)</span>
                         </div>
                     </form>
 
                     <!-- Quick Suggestions -->
-                    <div class="d-flex flex-wrap align-items-center gap-2 mt-3 pt-2 border-top">
+                    <div class="d-flex flex-wrap align-items-center gap-2 mt-3 pt-3 border-top">
                         <span class="text-muted small fw-medium">Try analyzing:</span>
                         <button type="button" class="btn btn-sm os-btn-pill sample-repo-btn" data-repo="facebook/react">
                             <i class="bi bi-box-seam me-1"></i>facebook/react
                         </button>
-                        <button type="button" class="btn btn-sm os-btn-pill sample-repo-btn" data-repo="tensorflow/tensorflow">
-                            <i class="bi bi-box-seam me-1"></i>tensorflow/tensorflow
-                        </button>
                         <button type="button" class="btn btn-sm os-btn-pill sample-repo-btn" data-repo="vuejs/core">
                             <i class="bi bi-box-seam me-1"></i>vuejs/core
+                        </button>
+                        <button type="button" class="btn btn-sm os-btn-pill sample-repo-btn" data-repo="django/django">
+                            <i class="bi bi-box-seam me-1"></i>django/django
                         </button>
                         <button type="button" class="btn btn-sm os-btn-pill sample-repo-btn" data-repo="pallets/flask">
                             <i class="bi bi-box-seam me-1"></i>pallets/flask
@@ -75,35 +92,47 @@
                     </div>
                 </div>
 
-                <!-- Interactive Loading Modal / Overlay -->
-                <div class="os-loading-overlay d-none" id="analysisLoadingOverlay">
+                <!-- Truthful Multi-Step Loading Overlay (Section 32) -->
+                <div class="os-loading-overlay d-none" id="analysisLoadingOverlay" role="dialog" aria-modal="true" aria-labelledby="loadingTitle">
                     <div class="card os-loading-card shadow border p-4 text-start">
                         <div class="d-flex align-items-center justify-content-between mb-3">
-                            <h5 class="fw-bold mb-0 text-dark d-flex align-items-center gap-2">
+                            <h5 class="fw-bold mb-0 text-dark d-flex align-items-center gap-2" id="loadingTitle">
                                 <span class="spinner-border spinner-border-sm text-primary" role="status"></span>
                                 Analyzing Repository
                             </h5>
-                            <span class="badge bg-light text-dark border" id="loadingRepoName">repository</span>
+                            <span class="badge bg-light text-dark border font-monospace" id="loadingRepoName">repository</span>
                         </div>
                         <p class="text-secondary small mb-3">
-                            Connecting to GitHub REST API, validating repository endpoints, and calculating metrics...
+                            Running analytical pipeline against GitHub REST API and executing Pandas computations...
                         </p>
                         <div class="os-loading-steps list-group list-group-flush border rounded-3 mb-2">
-                            <div class="list-group-item d-flex align-items-center gap-3 py-2" id="step-validate">
-                                <span class="os-step-icon text-success"><i class="bi bi-check-circle-fill"></i></span>
-                                <span class="small fw-medium">Validating repository identifier</span>
+                            <div class="list-group-item d-flex align-items-center gap-3 py-2 text-success" id="step-validate">
+                                <span class="os-step-icon"><i class="bi bi-check-circle-fill"></i></span>
+                                <span class="small fw-medium">Validating repository format</span>
                             </div>
-                            <div class="list-group-item d-flex align-items-center gap-3 py-2" id="step-connect">
-                                <span class="os-step-icon text-primary"><i class="bi bi-arrow-repeat spin"></i></span>
+                            <div class="list-group-item d-flex align-items-center gap-3 py-2 text-primary" id="step-connect">
+                                <span class="os-step-icon"><i class="bi bi-arrow-repeat spin"></i></span>
                                 <span class="small fw-medium">Connecting to GitHub REST API</span>
                             </div>
-                            <div class="list-group-item d-flex align-items-center gap-3 py-2 text-muted" id="step-data">
+                            <div class="list-group-item d-flex align-items-center gap-3 py-2 text-muted" id="step-meta">
                                 <span class="os-step-icon"><i class="bi bi-circle"></i></span>
-                                <span class="small fw-medium">Collecting metadata, statistics & languages</span>
+                                <span class="small fw-medium">Collecting repository metadata & languages</span>
+                            </div>
+                            <div class="list-group-item d-flex align-items-center gap-3 py-2 text-muted" id="step-commits">
+                                <span class="os-step-icon"><i class="bi bi-circle"></i></span>
+                                <span class="small fw-medium">Collecting paginated commit activity</span>
+                            </div>
+                            <div class="list-group-item d-flex align-items-center gap-3 py-2 text-muted" id="step-issues">
+                                <span class="os-step-icon"><i class="bi bi-circle"></i></span>
+                                <span class="small fw-medium">Collecting issues & pull requests</span>
                             </div>
                             <div class="list-group-item d-flex align-items-center gap-3 py-2 text-muted" id="step-analytics">
                                 <span class="os-step-icon"><i class="bi bi-circle"></i></span>
-                                <span class="small fw-medium">Preparing Pandas analytics & health scoring</span>
+                                <span class="small fw-medium">Processing Pandas analytics & 5-pillar scoring</span>
+                            </div>
+                            <div class="list-group-item d-flex align-items-center gap-3 py-2 text-muted" id="step-save">
+                                <span class="os-step-icon"><i class="bi bi-circle"></i></span>
+                                <span class="small fw-medium">Synchronizing records & saving snapshot</span>
                             </div>
                         </div>
                     </div>
@@ -115,7 +144,7 @@
 </div>
 
 <!-- Architecture & Pipeline Section -->
-<section class="py-5 bg-white border-top border-bottom">
+<section class="py-5 bg-white border-bottom">
     <div class="container-xl">
         <div class="text-center mb-5">
             <h2 class="h3 fw-bold text-dark mb-2">Engineered for Open-Source Transparency</h2>
@@ -126,46 +155,46 @@
 
         <div class="row g-4">
             <div class="col-md-6 col-lg-3">
-                <div class="card h-100 os-feature-card p-3">
-                    <div class="os-feature-icon mb-3 text-primary">
+                <div class="card h-100 p-3 shadow-xs">
+                    <div class="mb-3 text-primary">
                         <i class="bi bi-git fs-3"></i>
                     </div>
-                    <h5 class="fw-semibold text-dark h6 mb-2">1. Real-Time Ingestion</h5>
+                    <h3 class="fw-semibold text-dark h6 mb-2">1. Real-Time Ingestion</h3>
                     <p class="text-secondary small mb-0">
-                        Pulls authentic metadata, stars, forks, watcher counts, open issues, and languages directly from GitHub REST API.
+                        Pulls authentic metadata, stars, forks, watcher counts, open issues, and languages directly from GitHub REST API with real pagination.
                     </p>
                 </div>
             </div>
             <div class="col-md-6 col-lg-3">
-                <div class="card h-100 os-feature-card p-3">
-                    <div class="os-feature-icon mb-3 text-success">
+                <div class="card h-100 p-3 shadow-xs">
+                    <div class="mb-3 text-success">
                         <i class="bi bi-database-fill-check fs-3"></i>
                     </div>
-                    <h5 class="fw-semibold text-dark h6 mb-2">2. PostgreSQL Persistence</h5>
+                    <h3 class="fw-semibold text-dark h6 mb-2">2. PostgreSQL Persistence</h3>
                     <p class="text-secondary small mb-0">
-                        Structured relational tables for repositories, contributors, commit activity, issues, and PR velocity tracking.
+                        Structured relational tables for repositories, contributors, commit activity, issues, and PR velocity with database transaction protection.
                     </p>
                 </div>
             </div>
             <div class="col-md-6 col-lg-3">
-                <div class="card h-100 os-feature-card p-3">
-                    <div class="os-feature-icon mb-3 text-warning">
-                        <i class="bi bi-bar-chart-steps fs-3"></i>
+                <div class="card h-100 p-3 shadow-xs">
+                    <div class="mb-3 text-warning">
+                        <i class="bi bi-pie-chart-fill fs-3"></i>
                     </div>
-                    <h5 class="fw-semibold text-dark h6 mb-2">3. Pandas Analytics</h5>
+                    <h3 class="fw-semibold text-dark h6 mb-2">3. Pandas Analytics</h3>
                     <p class="text-secondary small mb-0">
-                        Vectorized data processing computes byte-accurate language distributions and historical activity aggregations.
+                        Vectorized DataFrame aggregations, language distributions, issue resolution median days, PR merge turnaround, and maintainer HHI concentration.
                     </p>
                 </div>
             </div>
             <div class="col-md-6 col-lg-3">
-                <div class="card h-100 os-feature-card p-3">
-                    <div class="os-feature-icon mb-3 text-info">
+                <div class="card h-100 p-3 shadow-xs">
+                    <div class="mb-3 text-info">
                         <i class="bi bi-shield-check fs-3"></i>
                     </div>
-                    <h5 class="fw-semibold text-dark h6 mb-2">4. Transparent Health Score</h5>
+                    <h3 class="fw-semibold text-dark h6 mb-2">4. 5-Pillar Health Scoring</h3>
                     <p class="text-secondary small mb-0">
-                        Deterministic scoring across 5 weighted pillars: Activity, Issue Resolution, PR Flow, Contributor Diversity, and Maintenance.
+                        Deterministic multi-signal health index across Activity (25%), Issues (20%), PRs (20%), Diversity (15%), and Maintenance (20%).
                     </p>
                 </div>
             </div>
@@ -173,41 +202,54 @@
     </div>
 </section>
 
-<!-- Recently Analyzed Repositories -->
+<!-- Recent Analyzed Repositories Section -->
 {% if recent_repos %}
-<section class="py-5">
+<section class="py-5 bg-light">
     <div class="container-xl">
         <div class="d-flex align-items-center justify-content-between mb-4">
             <div>
-                <h3 class="h5 fw-bold text-dark mb-1">Recently Analyzed Repositories</h3>
-                <p class="text-secondary small mb-0">Persisted in local PostgreSQL database</p>
+                <h2 class="h4 fw-bold text-dark mb-1">Recently Analyzed Repositories</h2>
+                <p class="text-secondary small mb-0">Live snapshot catalog cached from previous engineering analyses</p>
             </div>
-            <a href="{% url 'history' %}" class="btn btn-sm os-btn-outline">
+            <a href="{% url 'history' %}" class="btn btn-sm os-btn-secondary">
                 View All History <i class="bi bi-arrow-right ms-1"></i>
             </a>
         </div>
 
         <div class="row g-3">
             {% for r in recent_repos %}
+            {% with latest=r.analyses.first %}
             <div class="col-md-6 col-lg-4">
-                <div class="card h-100 os-repo-card p-3">
-                    <div class="d-flex align-items-start justify-content-between mb-2">
-                        <a href="{% url 'analyze' %}?repo={{ r.full_name }}" class="fw-bold text-decoration-none text-dark hover-accent">
-                            {{ r.full_name }}
-                        </a>
-                        <span class="badge bg-light text-secondary border small">
-                            <i class="bi bi-star-fill text-warning me-1"></i>{{ r.stars }}
+                <div class="card h-100 border shadow-xs p-3">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <h3 class="h6 fw-bold mb-1 font-monospace">
+                                <a href="{% url 'analyze' %}?repo={{ r.full_name }}" class="text-dark text-decoration-none hover-accent">
+                                    {{ r.full_name }}
+                                </a>
+                            </h3>
+                            <span class="text-muted extra-small">Updated {{ r.fetched_at|timesince }} ago</span>
+                        </div>
+                        {% if latest %}
+                        <span class="badge {% if latest.health_score >= 85 %}bg-success-subtle text-success border border-success-subtle{% elif latest.health_score >= 70 %}bg-primary-subtle text-primary border border-primary-subtle{% elif latest.health_score >= 50 %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} font-monospace">
+                            {{ latest.health_score }} / 100
                         </span>
+                        {% endif %}
                     </div>
                     <p class="text-secondary small mb-3 text-truncate-2">
                         {{ r.description|default:"No description provided." }}
                     </p>
-                    <div class="d-flex align-items-center justify-content-between pt-2 border-top mt-auto text-muted small">
-                        <span><i class="bi bi-bezier2 me-1"></i>{{ r.forks }} forks</span>
-                        <span><i class="bi bi-clock me-1"></i>{{ r.fetched_at|timesince }} ago</span>
+                    <div class="d-flex align-items-center justify-content-between mt-auto pt-2 border-top extra-small text-muted">
+                        <span><i class="bi bi-star-fill text-warning me-1"></i>{{ r.stars }}</span>
+                        <span><i class="bi bi-bezier2 me-1"></i>{{ r.forks }}</span>
+                        <span><i class="bi bi-code-slash me-1"></i>{{ r.language|default:"Other" }}</span>
+                        <a href="{% url 'analyze' %}?repo={{ r.full_name }}" class="text-primary fw-semibold text-decoration-none">
+                            Inspect <i class="bi bi-arrow-right"></i>
+                        </a>
                     </div>
                 </div>
             </div>
+            {% endwith %}
             {% endfor %}
         </div>
     </div>

@@ -17,9 +17,14 @@
                 </div>
                 <h1 class="h3 fw-bold text-dark mb-0">Historical Health Score Progression</h1>
             </div>
-            <a href="{% url 'analyze' %}?repo={{ repository.full_name }}" class="btn btn-sm os-btn-primary">
-                <i class="bi bi-arrow-repeat me-1"></i> Re-Analyze Now
-            </a>
+            <div class="d-flex align-items-center gap-2">
+                <a href="{% url 'analyze' %}?repo={{ repository.full_name }}" class="btn btn-sm os-btn-secondary">
+                    <i class="bi bi-speedometer2 me-1"></i> Live Dashboard
+                </a>
+                <a href="{% url 'analyze' %}?repo={{ repository.full_name }}&refresh=true" class="btn btn-sm os-btn-primary">
+                    <i class="bi bi-arrow-clockwise me-1"></i> Re-Analyze Now
+                </a>
+            </div>
         </div>
 
         <!-- Health Trend Chart Card -->
@@ -34,7 +39,7 @@
                 {% if trend.has_trend %}
                     <canvas id="historicalDetailChart"></canvas>
                 {% else %}
-                    <div class="h-100 d-flex flex-column align-items-center justify-content-center text-muted">
+                    <div class="h-100 d-flex flex-column align-items-center justify-content-center text-muted border rounded bg-light">
                         <i class="bi bi-info-circle fs-3 mb-2 text-primary"></i>
                         <span class="fw-semibold text-dark">Single Snapshot Recorded</span>
                         <span class="small">Re-analyze this repository over time to build a historical trend curve.</span>
@@ -43,30 +48,37 @@
             </div>
         </div>
 
-        <!-- Snapshot Audit Log Table -->
+        <!-- Snapshot Audit Log Table (Section 28) -->
         <div class="card border shadow-sm">
-            <div class="p-3 border-bottom bg-light">
+            <div class="p-3 border-bottom bg-light d-flex justify-content-between align-items-center">
                 <h3 class="h6 fw-bold text-dark mb-0">Evaluation Snapshot Audit Log ({{ analyses.count }})</h3>
+                <span class="text-muted extra-small">Immutable Snapshot History</span>
             </div>
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
                         <tr class="text-muted small">
-                            <th>Evaluation Timestamp</th>
+                            <th>Timestamp</th>
+                            <th>Window</th>
                             <th>Health Score</th>
                             <th>Activity (25%)</th>
                             <th>Issues (20%)</th>
                             <th>PRs (20%)</th>
                             <th>Diversity (15%)</th>
                             <th>Maintenance (20%)</th>
+                            <th>Coverage Sample</th>
                             <th>Stars</th>
-                            <th>Forks</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for a in analyses %}
                         <tr>
                             <td class="font-monospace small text-dark">{{ a.analyzed_at|date:"M d, Y H:i:s" }}</td>
+                            <td>
+                                <span class="badge bg-light text-secondary border font-monospace extra-small">
+                                    {{ a.analysis_window }}
+                                </span>
+                            </td>
                             <td>
                                 <span class="badge {% if a.health_score >= 85 %}bg-success-subtle text-success border border-success-subtle{% elif a.health_score >= 70 %}bg-primary-subtle text-primary border border-primary-subtle{% elif a.health_score >= 50 %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} font-monospace fw-bold">
                                     {{ a.health_score }} / 100
@@ -77,12 +89,14 @@
                             <td class="font-monospace small">{{ a.pr_score }}</td>
                             <td class="font-monospace small">{{ a.contributor_score }}</td>
                             <td class="font-monospace small">{{ a.maintenance_score }}</td>
+                            <td class="extra-small text-muted font-monospace">
+                                {{ a.commits_count }} commits · {{ a.contributors_count }} contribs
+                            </td>
                             <td class="font-monospace small text-secondary">{{ a.stars }}</td>
-                            <td class="font-monospace small text-secondary">{{ a.forks }}</td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="9" class="text-center text-muted py-4">No analysis snapshots recorded.</td>
+                            <td colspan="10" class="text-center text-muted py-4">No analysis snapshots recorded.</td>
                         </tr>
                         {% endfor %}
                     </tbody>

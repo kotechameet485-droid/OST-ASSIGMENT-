@@ -1,6 +1,7 @@
 """
 Database models for OpenSourceLens.
-Defines schemas for Repository, Contributor, CommitActivity, Issue, PullRequest, and Language.
+Defines relational schemas for Repository, Contributor, CommitActivity,
+Issue, PullRequest, Language, and historical RepositoryAnalysis snapshots.
 """
 
 from django.db import models
@@ -9,26 +10,43 @@ from django.db import models
 class Repository(models.Model):
     """
     Stores core metadata and overall statistics for a GitHub repository.
+    Includes rich metadata captured from the GitHub REST API.
     """
     owner = models.CharField(max_length=255, db_index=True)
     name = models.CharField(max_length=255, db_index=True)
     full_name = models.CharField(max_length=512, unique=True, db_index=True)
     description = models.TextField(blank=True, null=True)
     url = models.URLField(max_length=500)
-    stars = models.PositiveIntegerField(default=0)
+    stars = models.PositiveIntegerField(default=0, db_index=True)
     forks = models.PositiveIntegerField(default=0)
     watchers = models.PositiveIntegerField(default=0)
     open_issues = models.PositiveIntegerField(default=0)
-    created_at = models.DateTimeField()
-    updated_at = models.DateTimeField()
+    created_at = models.DateTimeField(db_index=True)
+    updated_at = models.DateTimeField(db_index=True)
+    pushed_at = models.DateTimeField(blank=True, null=True, db_index=True)
     default_branch = models.CharField(max_length=100, default='main')
     license = models.CharField(max_length=255, blank=True, null=True)
-    fetched_at = models.DateTimeField(auto_now=True)
+    license_spdx = models.CharField(max_length=100, blank=True, null=True)
+    language = models.CharField(max_length=100, blank=True, null=True)
+    size = models.PositiveIntegerField(default=0, help_text="Repository size in KB")
+    topics = models.JSONField(default=list, blank=True)
+    is_archived = models.BooleanField(default=False, db_index=True)
+    is_fork = models.BooleanField(default=False)
+    has_issues = models.BooleanField(default=True)
+    has_wiki = models.BooleanField(default=False)
+    has_pages = models.BooleanField(default=False)
+    subscribers_count = models.PositiveIntegerField(default=0)
+    network_count = models.PositiveIntegerField(default=0)
+    fetched_at = models.DateTimeField(auto_now=True, db_index=True)
 
     class Meta:
         verbose_name = 'Repository'
         verbose_name_plural = 'Repositories'
         ordering = ['-stars', 'name']
+        indexes = [
+            models.Index(fields=['owner', 'name']),
+            models.Index(fields=['-fetched_at']),
+        ]
 
     def __str__(self):
         return self.full_name
@@ -53,6 +71,9 @@ class Contributor(models.Model):
         verbose_name_plural = 'Contributors'
         ordering = ['-contributions']
         unique_together = ('repository', 'username')
+        indexes = [
+            models.Index(fields=['repository', '-contributions']),
+        ]
 
     def __str__(self):
         return f"{self.username} ({self.repository.full_name})"
@@ -74,6 +95,10 @@ class CommitActivity(models.Model):
         verbose_name = 'Commit Activity'
         verbose_name_plural = 'Commit Activities'
         ordering = ['-date']
+        unique_together = ('repository', 'date')
+        indexes = [
+            models.Index(fields=['repository', '-date']),
+        ]
 
     def __str__(self):
         return f"{self.repository.full_name} - {self.date}: {self.commit_count} commits"
@@ -82,6 +107,7 @@ class CommitActivity(models.Model):
 class Issue(models.Model):
     """
     Stores issues fetched from a repository for tracking issue resolution health.
+    Pull requests are explicitly separated from issues.
     """
     STATE_CHOICES = (
         ('open', 'Open'),
@@ -95,8 +121,8 @@ class Issue(models.Model):
     )
     issue_number = models.PositiveIntegerField()
     title = models.CharField(max_length=500)
-    state = models.CharField(max_length=20, choices=STATE_CHOICES, default='open')
-    created_at = models.DateTimeField()
+    state = models.CharField(max_length=20, choices=STATE_CHOICES, default='open', db_index=True)
+    created_at = models.DateTimeField(db_index=True)
     closed_at = models.DateTimeField(blank=True, null=True)
 
     class Meta:
@@ -104,6 +130,10 @@ class Issue(models.Model):
         verbose_name_plural = 'Issues'
         ordering = ['-created_at']
         unique_together = ('repository', 'issue_number')
+        indexes = [
+            models.Index(fields=['repository', 'state']),
+            models.Index(fields=['repository', '-created_at']),
+        ]
 
     def __str__(self):
         return f"#{self.issue_number} - {self.title[:50]} ({self.state})"
@@ -126,8 +156,8 @@ class PullRequest(models.Model):
     )
     pr_number = models.PositiveIntegerField()
     title = models.CharField(max_length=500, blank=True, default='')
-    state = models.CharField(max_length=20, choices=STATE_CHOICES, default='open')
-    created_at = models.DateTimeField()
+    state = models.CharField(max_length=20, choices=STATE_CHOICES, default='open', db_index=True)
+    created_at = models.DateTimeField(db_index=True)
     closed_at = models.DateTimeField(blank=True, null=True)
     merged_at = models.DateTimeField(blank=True, null=True)
 
@@ -136,6 +166,10 @@ class PullRequest(models.Model):
         verbose_name_plural = 'Pull Requests'
         ordering = ['-created_at']
         unique_together = ('repository', 'pr_number')
+        indexes = [
+            models.Index(fields=['repository', 'state']),
+            models.Index(fields=['repository', '-created_at']),
+        ]
 
     def __str__(self):
         return f"PR #{self.pr_number} ({self.state}) - {self.repository.full_name}"
@@ -159,6 +193,9 @@ class Language(models.Model):
         verbose_name_plural = 'Languages'
         ordering = ['-bytes']
         unique_together = ('repository', 'language')
+        indexes = [
+            models.Index(fields=['repository', '-bytes']),
+        ]
 
     def __str__(self):
         return f"{self.language} ({self.percentage:.1f}%) - {self.repository.full_name}"
@@ -167,6 +204,7 @@ class Language(models.Model):
 class RepositoryAnalysis(models.Model):
     """
     Stores historical analysis snapshots for trend tracking and history audits.
+    Maintains complete audit trails across varying evaluation windows.
     """
     repository = models.ForeignKey(
         Repository,
@@ -174,6 +212,7 @@ class RepositoryAnalysis(models.Model):
         related_name='analyses'
     )
     analyzed_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    analysis_window = models.CharField(max_length=20, default='90d')
     stars = models.PositiveIntegerField(default=0)
     forks = models.PositiveIntegerField(default=0)
     open_issues = models.PositiveIntegerField(default=0)
@@ -186,12 +225,18 @@ class RepositoryAnalysis(models.Model):
     maintenance_score = models.PositiveIntegerField(default=0)
     commits_count = models.PositiveIntegerField(default=0)
     contributors_count = models.PositiveIntegerField(default=0)
+    prs_count = models.PositiveIntegerField(default=0)
+    issue_resolution_rate = models.FloatField(default=0.0)
+    pr_merge_rate = models.FloatField(default=0.0)
+    data_coverage = models.JSONField(default=dict, blank=True)
 
     class Meta:
         verbose_name = 'Repository Analysis'
         verbose_name_plural = 'Repository Analyses'
         ordering = ['-analyzed_at']
+        indexes = [
+            models.Index(fields=['repository', '-analyzed_at']),
+        ]
 
     def __str__(self):
         return f"{self.repository.full_name} Analysis ({self.analyzed_at.strftime('%Y-%m-%d %H:%M')}) - Score {self.health_score}"
-

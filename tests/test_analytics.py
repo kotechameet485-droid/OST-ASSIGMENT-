@@ -245,3 +245,62 @@ class AnalyticsEngineTests(TestCase):
         self.assertEqual(len(comp['chart_labels']), 2)
         self.assertEqual(comp['stars_data'], [225000, 45000])
         self.assertEqual(comp['health_data'], [88, 86])
+
+    def test_hhi_maintainer_concentration(self):
+        """Verify HHI calculation correctly identifies high vs low concentration."""
+        # 1. Monopoly maintainer (HHI = 10000)
+        single = [{'username': 'solo', 'contributions': 100}]
+        stats_single = AnalyticsEngine.calculate_contributor_statistics(single)
+        self.assertEqual(stats_single['hhi'], 10000.0)
+        self.assertEqual(stats_single['top1_share'], 100.0)
+        self.assertEqual(stats_single['concentration_label'], "High maintainer concentration")
+
+        # 2. Evenly distributed maintainers (HHI = 10 * 10^2 = 1000)
+        equal_contribs = [{'username': f'dev_{i}', 'contributions': 10} for i in range(10)]
+        stats_equal = AnalyticsEngine.calculate_contributor_statistics(equal_contribs)
+        self.assertEqual(stats_equal['hhi'], 1000.0)
+        self.assertEqual(stats_equal['concentration_label'], "Well-distributed maintainer base")
+
+    def test_median_issue_resolution_time_handles_outliers(self):
+        """Verify median resolution days is resilient against extreme outlier tickets."""
+        now = datetime.now(timezone.utc)
+        issues = [
+            {'state': 'closed', 'created_at': (now - timedelta(days=2)).isoformat(), 'closed_at': now.isoformat()},
+            {'state': 'closed', 'created_at': (now - timedelta(days=2)).isoformat(), 'closed_at': now.isoformat()},
+            {'state': 'closed', 'created_at': (now - timedelta(days=2)).isoformat(), 'closed_at': now.isoformat()},
+            # Massive outlier ticket open for 500 days
+            {'state': 'closed', 'created_at': (now - timedelta(days=500)).isoformat(), 'closed_at': now.isoformat()},
+        ]
+        stats = AnalyticsEngine.calculate_issue_statistics(issues)
+        # Median is 2.0 days while average is distorted to ~126.5 days
+        self.assertEqual(stats['median_resolution_days'], 2.0)
+        self.assertGreater(stats['avg_resolution_days'], 100.0)
+
+    def test_commit_statistics_duplicate_shas(self):
+        """Verify duplicate commit records are safely de-duplicated."""
+        now = datetime.now(timezone.utc)
+        commits = [
+            {'sha': 'c1', 'author': 'Dev', 'date': now.isoformat()},
+            {'sha': 'c1', 'author': 'Dev', 'date': now.isoformat()},
+            {'sha': 'c2', 'author': 'Dev', 'date': now.isoformat()},
+        ]
+        stats = AnalyticsEngine.calculate_commit_statistics(commits)
+        self.assertEqual(stats['total_analyzed'], 2)
+
+    def test_single_record_edge_cases(self):
+        """Verify analytics engine computes safely with exactly 1 record without dividing by zero."""
+        now = datetime.now(timezone.utc)
+        c_stats = AnalyticsEngine.calculate_commit_statistics([{'sha': 'x', 'author': 'A', 'date': now.isoformat()}])
+        self.assertEqual(c_stats['total_analyzed'], 1)
+
+        i_stats = AnalyticsEngine.calculate_issue_statistics([{'state': 'open', 'created_at': now.isoformat()}])
+        self.assertEqual(i_stats['total_analyzed'], 1)
+        self.assertEqual(i_stats['resolution_rate'], 0.0)
+
+        p_stats = AnalyticsEngine.calculate_pr_statistics([{'state': 'merged', 'created_at': now.isoformat(), 'merged_at': now.isoformat()}])
+        self.assertEqual(p_stats['total_analyzed'], 1)
+        self.assertEqual(p_stats['merge_rate'], 100.0)
+
+        l_stats = AnalyticsEngine.calculate_language_statistics({'Python': 100})
+        self.assertEqual(len(l_stats), 1)
+        self.assertEqual(l_stats[0]['percentage'], 100.0)

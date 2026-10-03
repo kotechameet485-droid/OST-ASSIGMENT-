@@ -2,15 +2,20 @@
 {% block title %}500 Server Error — OpenSourceLens{% endblock %}
 {% block content %}
 <div class="container-xl py-5 text-center">
-    <div class="py-5">
-        <div class="display-1 fw-bold text-muted mb-3 font-monospace">500</div>
+    <div class="py-5" style="max-width: 580px; margin: 0 auto;">
+        <span class="badge bg-danger-subtle text-danger border border-danger-subtle font-monospace px-3 py-1 mb-3">HTTP Error 500</span>
         <h1 class="h3 fw-bold text-dark mb-2">Service Execution Error</h1>
-        <p class="text-secondary max-w-lg mx-auto mb-4">
-            We couldn't retrieve or process repository data right now. Please verify your internet connection or check API rate limits.
+        <p class="text-secondary mb-4">
+            We encountered an unexpected condition while retrieving or processing repository telemetry. Please verify your internet connection, inspect GitHub API rate limits, or try again shortly.
         </p>
-        <a href="{% url 'home' %}" class="btn os-btn-primary px-4">
-            <i class="bi bi-arrow-left me-1"></i> Return to Homepage
-        </a>
+        <div class="d-flex justify-content-center gap-2">
+            <a href="{% url 'home' %}" class="btn os-btn-primary px-4">
+                <i class="bi bi-arrow-left me-1"></i> Return to Homepage
+            </a>
+            <a href="{% url 'history' %}" class="btn os-btn-secondary px-3">
+                <i class="bi bi-clock-history me-1"></i> View Saved Analyses
+            </a>
+        </div>
     </div>
 </div>
 {% endblock %}

@@ -10,7 +10,15 @@ from dashboard.services.github_service import GitHubService, GitHubInvalidRepoEr
 class RepositorySearchForm(forms.Form):
     """
     Search form for entering and validating GitHub repositories.
+    Supports configurable analysis windows (30d, 90d, 180d, 365d).
     """
+    WINDOW_CHOICES = (
+        ('30d', 'Last 30 Days'),
+        ('90d', 'Last 90 Days'),
+        ('180d', 'Last 6 Months'),
+        ('365d', 'Last 1 Year'),
+    )
+
     repository = forms.CharField(
         max_length=255,
         required=True,
@@ -26,6 +34,16 @@ class RepositorySearchForm(forms.Form):
             'required': 'Please enter a GitHub repository (e.g. facebook/react).',
         }
     )
+    window = forms.ChoiceField(
+        choices=WINDOW_CHOICES,
+        required=False,
+        initial='90d',
+        widget=forms.Select(attrs={
+            'class': 'form-select form-select-lg os-window-select font-monospace',
+            'id': 'analysisWindowSelect',
+            'aria-label': 'Analysis Scope Window',
+        })
+    )
 
     def clean_repository(self):
         data = self.cleaned_data.get('repository', '').strip()
@@ -34,6 +52,12 @@ class RepositorySearchForm(forms.Form):
             return f"{owner}/{repo}"
         except GitHubInvalidRepoError as e:
             raise forms.ValidationError(str(e))
+
+    def clean_window(self):
+        val = self.cleaned_data.get('window', '90d')
+        if val not in dict(self.WINDOW_CHOICES):
+            return '90d'
+        return val
 
 
 class RepositoryCompareForm(forms.Form):

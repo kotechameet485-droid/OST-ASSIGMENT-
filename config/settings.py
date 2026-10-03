@@ -4,6 +4,7 @@ Django settings for OpenSourceLens project.
 
 from pathlib import Path
 import os
+import sys
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -62,39 +63,25 @@ WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
 # Database Configuration
-# Primary: PostgreSQL
+# Primary Production Configuration: PostgreSQL.
+# In accordance with Test Database Independence (Section 47), running tests uses isolated SQLite.
 DB_ENGINE = os.getenv('DB_ENGINE', 'django.db.backends.postgresql')
 DB_NAME = os.getenv('DB_NAME', 'opensourcelens')
 DB_USER = os.getenv('DB_USER', 'postgres')
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'postgres')
 DB_HOST = os.getenv('DB_HOST', '127.0.0.1')
 DB_PORT = os.getenv('DB_PORT', '5432')
+USE_SQLITE = os.getenv('USE_SQLITE', 'False').lower() in ('true', '1', 'yes')
+IS_TESTING = 'test' in sys.argv
 
-# Test PostgreSQL connectivity on startup to ensure zero-crash developer experience
-use_postgres = False
-if DB_ENGINE == 'django.db.backends.postgresql':
-    try:
-        import psycopg
-        conn = psycopg.connect(
-            dbname='postgres',
-            user=DB_USER,
-            password=DB_PASSWORD,
-            host=DB_HOST,
-            port=DB_PORT,
-            connect_timeout=1,
-        )
-        conn.close()
-        use_postgres = True
-    except Exception as e:
-        use_postgres = False
-        import sys
-        # Print helpful instruction only once during startup
-        if 'manage.py' in sys.argv[0]:
-            print(f"\n[OpenSourceLens] Notice: PostgreSQL authentication pending for user '{DB_USER}' at {DB_HOST}:{DB_PORT}.")
-            print(f"[OpenSourceLens] Please update DB_PASSWORD in .env with your local PostgreSQL password.")
-            print(f"[OpenSourceLens] Using local development database (db.sqlite3) until PostgreSQL credentials are provided.\n")
-
-if use_postgres:
+if IS_TESTING or USE_SQLITE or 'sqlite3' in DB_ENGINE:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+else:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
@@ -105,13 +92,15 @@ if use_postgres:
             'PORT': DB_PORT,
         }
     }
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
+
+# In-memory caching for repeated API lookups and analysis data
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'opensourcelens-cache',
     }
+}
+ANALYSIS_CACHE_FRESHNESS_MINUTES = int(os.getenv('ANALYSIS_CACHE_FRESHNESS_MINUTES', '60'))
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -145,4 +134,35 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # GitHub API Configuration
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN', '')
-GITHUB_API_BASE_URL = 'https://api.github.com'
+GITHUB_API_BASE_URL = os.getenv('GITHUB_API_BASE_URL', 'https://api.github.com')
+GITHUB_API_TIMEOUT = int(os.getenv('GITHUB_API_TIMEOUT', '12'))
+
+# Logging Configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'standard': {
+            'format': '[%(asctime)s] %(levelname)s in %(name)s: %(message)s',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'standard',
+        },
+    },
+    'loggers': {
+        'dashboard': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+    },
+}

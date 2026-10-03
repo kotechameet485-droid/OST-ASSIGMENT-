@@ -1,293 +1,555 @@
 # OpenSourceLens 🔍
-### Open-Source Project Intelligence & Advanced Health Analytics Platform
+### Open-Source Project Intelligence & Repository Health Analytics Platform
 
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
-[![Django](https://img.shields.io/badge/Django-6.1-092E20?style=flat&logo=django&logoColor=white)](https://www.djangoproject.com/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-4169E1?style=flat&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Django](https://img.shields.io/badge/Django-5.0+-092E20?style=flat&logo=django&logoColor=white)](https://www.djangoproject.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-4169E1?style=flat&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Pandas](https://img.shields.io/badge/Pandas-2.2+-150458?style=flat&logo=pandas&logoColor=white)](https://pandas.pydata.org/)
 [![Chart.js](https://img.shields.io/badge/Chart.js-4.4-FF6384?style=flat&logo=chartdotjs&logoColor=white)](https://www.chartjs.org/)
 [![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3-7952B3?style=flat&logo=bootstrap&logoColor=white)](https://getbootstrap.com/)
+[![Tests](https://img.shields.io/badge/Tests-63%20Passed-success?style=flat&logo=pytest&logoColor=white)](#testing)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-OpenSourceLens is an open-source project intelligence and health analytics platform built as part of the **Open Source Technologies (OST)** coursework. It enables developers, engineering managers, students, and open-source contributors to evaluate any public GitHub repository, transform raw telemetry into actionable metrics, and assess sustainability and maintainability through a transparent, reproducible health score.
+**OpenSourceLens** is a production-grade open-source project intelligence and health analytics platform built as part of the **Open Source Technologies (OST)** engineering curriculum. It transforms raw telemetry from the public GitHub REST API into actionable engineering metrics, evaluating repository activity, triage responsiveness, code integration, maintainer diversity, and hygiene through a transparent, reproducible, multi-signal methodology.
 
 ---
 
-## 📑 Table of Contents
+## Table of Contents
 
-- [Stage 2 Architecture](#-stage-2-architecture)
-- [Stage 2 Features Overview](#-stage-2-features-overview)
-- [Analytical Modules & Mathematical Formulations](#-analytical-modules--mathematical-formulations)
-  - [1. Commit Analytics & Time-Series Velocity](#1-commit-analytics--time-series-velocity)
-  - [2. Issue Analytics & Backlog Resolution](#2-issue-analytics--backlog-resolution)
-  - [3. Pull Request Analytics & Turnaround](#3-pull-request-analytics--turnaround)
-  - [4. Contributor Distribution & Concentration](#4-contributor-distribution--concentration)
-  - [5. Technology & Language Analytics](#5-technology--language-analytics)
-- [Refined 5-Pillar Health Score Methodology](#-refined-5-pillar-health-score-methodology)
-- [Repository Comparison Module (/compare/)](#-repository-comparison-module-compare)
-- [Repository History & Historical Health Timeline](#-repository-history--historical-health-timeline)
-- [Directory Structure](#-directory-structure)
-- [Quick Start Guide](#-quick-start-guide)
-- [Database Configuration & PostgreSQL Setup](#-database-configuration--postgresql-setup)
-- [Running Automated Tests (37 Tests)](#-running-automated-tests-37-tests)
-- [OST Academic Alignment & Viva Guide](#-ost-academic-alignment--viva-guide)
+- [Problem Statement](#problem-statement)
+- [Solution](#solution)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Technology Stack](#technology-stack)
+- [Project Structure](#project-structure)
+- [GitHub API Integration](#github-api-integration)
+- [Database Schema](#database-schema)
+- [Analytics Methodology](#analytics-methodology)
+- [Health Score Formula](#health-score-formula)
+- [Data Coverage](#data-coverage)
+- [Installation](#installation)
+- [Environment Variables](#environment-variables)
+- [PostgreSQL Setup](#postgresql-setup)
+- [Running the Project](#running-the-project)
+- [Testing](#testing)
+- [Screenshots](#screenshots)
+- [API / Error Handling](#api--error-handling)
+- [Security Considerations](#security-considerations)
+- [OST Syllabus Mapping](#ost-syllabus-mapping)
+- [Future Scope](#future-scope)
+- [License](#license)
 
 ---
 
-## 🏛 Stage 2 Architecture
+## Problem Statement
 
-The platform processes raw GitHub REST telemetry into time-series dataframes, executes statistical transformations using **Pandas**, stores normalized snapshots in **PostgreSQL**, and renders interactive **Chart.js** canvases within a clean developer design system:
+Evaluating open-source software libraries is a critical challenge for software engineering teams, academic researchers, and enterprise architects:
+
+1. **Superficial Vanity Metrics:** GitHub stars, fork counts, and watcher counts do not reflect codebase maintainability, backlog responsiveness, or bus-factor risks.
+2. **Opaque Black-Box Ratings:** Existing repository evaluation tools often output arbitrary scores without disclosing their underlying formula or data limits.
+3. **Data Sampling Without Transparency:** Most tools analyze only a small recent sample of commits or issues while presenting the results as repository-wide truth.
+4. **Maintenance Stagnation:** Projects frequently fall into unmaintained states despite high historical popularity, creating unseen security and supply-chain vulnerabilities.
+
+---
+
+## Solution
+
+**OpenSourceLens** delivers an objective, mathematically grounded engineering dashboard that:
+- Ingests public telemetry directly from the GitHub REST API using **reusable pagination**, **configurable time windows** (30d, 90d, 180d, 365d), and **strict HTTP timeouts**.
+- Processes time-series dataframes using **Pandas** to calculate robust non-distorted statistics (such as median issue resolution times and commit velocity).
+- Quantifies community maintainer concentration using the **Herfindahl-Hirschman Index ($HHI = \sum share_i^2$)**.
+- Evaluates project sustainability through a deterministic, transparent **5-Pillar Health Score** (0–100) with clear driving factors.
+- Provides complete **data coverage transparency** on every card and chart, explicitly stating sample limits and avoiding misleading generalizations.
+- Persists historical snapshots in **PostgreSQL** inside atomic database transactions for longitudinal health trend tracking and objective side-by-side repository comparison.
+
+---
+
+## Features
+
+| Category | Capability | Description |
+| :--- | :--- | :--- |
+| **Telemetry Ingestion** | **Paginated API Client** | Paginates through commits, issues, pull requests, and contributors up to safe configured ceilings. |
+| **Configurable Scope** | **Time Windows** | Supports filtering analysis to 30 Days, 90 Days, 6 Months, or 1 Year with explicit cutoff timestamps. |
+| **Caching & Sync** | **Smart Freshness Cache** | Reuses local database snapshots within 60-minute freshness window, with explicit user-triggered refresh option. |
+| **Time-Series Velocity** | **Commit Analytics** | Daily, weekly, and monthly velocity charts, average commits/day, peak activity, and days since latest commit. |
+| **Triage Health** | **Issue Analytics** | Sample resolution rate, median resolution days (resilient to outliers), stale backlog counter (>90d), and opened vs. closed trends. |
+| **Turnaround Metrics** | **Pull Request Analytics** | Merge rate, median merge turnaround in hours/days, and state breakdown (merged, open, closed). |
+| **Community Health** | **Contributor Concentration** | Top 1 and Top 5 contributor shares, full leaderboard, and Herfindahl-Hirschman Index ($HHI$) maintainer dependency indicator. |
+| **Tech Composition** | **Language Breakdown** | Byte counts, normalized percentages summing cleanly to 100.0%, and interactive Donut distribution. |
+| **Historical Auditing** | **Health Snapshot Timeline** | Stores immutable analytical snapshots over time; visualizes score progression over multiple runs. |
+| **Multi-Repo Benchmarking**| **Comparative Analysis** | Side-by-side comparison matrix for 2 or 3 projects with objective comparative charts and neutral commentary. |
+| **UX & Resilience** | **Developer Design System** | Clean Slate/Charcoal/Blue aesthetic, truthful multi-step loading indicators, and dedicated empty/error states. |
+
+---
+
+## Architecture
+
+The system follows a strict, maintainable separation of concerns with thin controllers, a dedicated service orchestration layer, atomic persistence, and a decoupled statistical engine:
 
 ```text
-                         OpenSourceLens
-                               │
-                ┌──────────────┴──────────────┐
-                ↓                             ↓
-        Repository Analysis             Repository History
-                │                             │
-                ↓                             ↓
-           GitHub API                  Historical Analyses
-                │                             │
-                └──────────────┬──────────────┘
-                               ↓
-                       Analytics Engine (Pandas)
-                               │
-              ┌────────────────┼────────────────┐
-              ↓                ↓                ↓
-           Commits           Issues             PRs
-              ↓                ↓                ↓
-           Trends          Resolution        Merge Rate
-              │                │                │
-              └────────────────┼────────────────┘
-                               ↓
-                         Contributors
-                               ↓
-                       Health Metrics (5 Pillars)
-                               ↓
-                    Interactive Dashboard
-                               ↓
-                  History + Comparison (/compare/)
+                                  Browser
+                                     │
+                                     ▼
+                            Django Views Layer
+                     (home, analyze, history, compare)
+                                     │
+                                     ▼
+                              AnalysisService
+                     (caching, orchestration, transactions)
+                    ┌────────────────┼────────────────┐
+                    ▼                ▼                ▼
+             GitHubService     AnalyticsEngine   RepositoryService
+          (REST API Client,      (Pandas Math,    (History queries,
+           Pagination, Retry)    Health Model)    Compare matrix)
+                    │                │                │
+                    └────────────────┼────────────────┘
+                                     ▼
+                            Persistence Layer
+                          (PostgreSQL / SQLite)
+               ┌─────────────────────┼─────────────────────┐
+               ▼                     ▼                     ▼
+          Repository          Child Entities      RepositoryAnalysis
+      (Metadata, Topics,     (Languages, Issues,     (Immutable
+       SPDX, Star counts)     PRs, Contributors)      Historical Snapshot)
+                                     │
+                                     ▼
+                           Interactive UI Layer
+                 (Chart.js, Bootstrap 5.3, Vanilla CSS)
 ```
 
 ---
 
-## 🌟 Stage 2 Features Overview
+## Technology Stack
 
-1. **Commit Analytics & Time-Series Velocity:**
-   - 30-Day daily commit frequency, 90-day weekly distribution, and 6-month monthly trends.
-   - Calculates average commits/day, single-day maximums, and days since latest commit.
-2. **Issue Analytics & Resolution Rates:**
-   - Evaluates active triage health: `Resolution Rate = (Closed / Total Analyzed) × 100`.
-   - Computes average resolution time in days and flags stale issues (>90 days old).
-   - Monthly opened vs closed comparison bar chart.
-3. **Pull Request Turnaround & Merge Velocities:**
-   - Calculates `Merge Rate = (Merged PRs / Total PRs Analyzed) × 100`.
-   - Computes average turnaround duration in hours/days.
-   - Doughnut visualization of merged, open, and closed (unmerged) pull requests.
-4. **Contributor Leaderboard & Maintainer Distribution:**
-   - Contributor leaderboard with contribution volume, avatar, and percentage share.
-   - Analyzes concentration risk (Top 1 and Top 5 contributor shares) as an analytical indicator.
-5. **Enhanced Language Analysis:**
-   - Primary language detection, byte formatting, and percentage breakdown.
-   - Responsive multi-colored Doughnut chart and detail table.
-6. **Multi-Repository Comparison (`/compare/`):**
-   - Side-by-side comparison matrix for 2 or 3 public GitHub repositories.
-   - Comparative bar charts for stars, forks, and health scores.
-   - Strictly objective comparison—no biased "winner" or "best" labels.
-7. **Historical Health Progression (`/history/` and `/history/<owner>/<repo>/`):**
-   - Searchable, sortable catalog of analyzed repositories.
-   - Historical health score timeline for repositories evaluated over time.
+- **Backend:** Python 3.11+, Django 5.0+ (MVT Architecture, CSRF, ORM Transactions)
+- **Database:** PostgreSQL 16+ (Primary Production Storage via `psycopg` 3.x), SQLite (Development & Isolated Automated Testing)
+- **Data Analytics:** Pandas 2.2+ (Vectorized datetime operations, quantile medians, grouping, distribution math)
+- **External Integration:** GitHub REST API v3 (Session-managed HTTP requests, pagination, bearer token support)
+- **Frontend / Presentation:** HTML5, Vanilla CSS Design System, Bootstrap 5.3 Grid, Bootstrap Icons 1.11+
+- **Data Visualization:** Chart.js 4.4+ (Responsive line, bar, and doughnut charts with unified tooltip styling)
+- **Quality Assurance:** Django Test Framework, Python `unittest.mock` (63 Unit and Integration Tests, zero external network dependency)
 
 ---
 
-## 📐 Analytical Modules & Mathematical Formulations
-
-### 1. Commit Analytics & Time-Series Velocity
-Aggregates commits into daily, weekly, and monthly buckets using Pandas:
-- **Average Commits per Active Day:**
-  $$\text{Avg Commits/Day} = \frac{\sum_{i=1}^{N} \text{Commits}_i}{\text{Active Days}}$$
-- **Recency Penalty/Bonus:** Calculated from `days_since_latest_commit`:
-  - $\le 3\text{ days}$: Top score (98/100)
-  - $\le 14\text{ days}$: Healthy (90/100)
-  - $\le 45\text{ days}$: Moderate (78/100)
-  - $> 180\text{ days}$: Stagnant penalty (30/100)
-
-### 2. Issue Analytics & Backlog Resolution
-- **Resolution Rate:**
-  $$\text{Resolution Rate} = \left(\frac{\text{Closed Issues}}{\text{Total Issues Analyzed}}\right) \times 100$$
-- **Average Resolution Time:**
-  $$\text{Avg Duration} = \frac{1}{K}\sum_{j=1}^{K} (\text{closed\_at}_j - \text{created\_at}_j)$$
-- **Old Unresolved Issues:**
-  $$\text{Count}(\text{created\_at} < \text{Now} - 90\text{ days } \land \text{state} = \text{'open'})$$
-
-### 3. Pull Request Analytics & Turnaround
-- **PR Merge Rate:**
-  $$\text{Merge Rate} = \left(\frac{\text{Merged PRs}}{\text{Total PRs Analyzed}}\right) \times 100$$
-- **Turnaround Velocity:** Calculated as mean duration between PR creation and merge event:
-  $$\text{Turnaround} = \frac{1}{M}\sum_{m=1}^{M} (\text{merged\_at}_m - \text{created\_at}_m)$$
-
-### 4. Contributor Distribution & Concentration
-- **Top 1 Share:**
-  $$\text{Top 1 Share} = \left(\frac{\text{Contributions}_{\text{top 1}}}{\sum \text{Contributions}}\right) \times 100$$
-- **Top 5 Share:**
-  $$\text{Top 5 Share} = \left(\frac{\sum_{i=1}^{5}\text{Contributions}_i}{\sum \text{Contributions}}\right) \times 100$$
-
----
-
-## ⚖ Refined 5-Pillar Health Score Methodology
-
-The overall health score (0–100) is deterministically weighted across 5 observable signals:
-
-| Pillar | Weight | Telemetry Input | Normalization Rationale |
-| :--- | :---: | :--- | :--- |
-| **Activity** | **25%** | Days since latest commit, commit frequency | Measures active codebase stewardship. Pushes within 3 days receive 98/100. |
-| **Issue Management** | **20%** | Resolution rate, backlog age (>90d) | Evaluates maintainer responsiveness to bug reports and community feedback. |
-| **PR Activity** | **20%** | PR merge rate, merge turnaround velocity | Measures review velocity and integration of external contributions. |
-| **Contributor Diversity** | **15%** | Contributor count, Top 1 maintainer share | Evaluates community depth and resilience to single-maintainer burnout. |
-| **Maintenance & Hygiene** | **20%** | Open-source license, description, archive state | Confirms legal clarity, documentation purpose, and active repository status. |
-
-### Scoring Formula:
-$$\text{Health Score} = \text{round}\Big(0.25 \times S_{\text{act}} + 0.20 \times S_{\text{iss}} + 0.20 \times S_{\text{pr}} + 0.15 \times S_{\text{div}} + 0.20 \times S_{\text{maint}}\Big)$$
-
----
-
-## ⚔ Repository Comparison Module (`/compare/`)
-
-Access `/compare/` to benchmark public repositories side-by-side:
-- Compare 2 or 3 projects simultaneously (e.g. `facebook/react` vs `vuejs/core` vs `angular/angular`).
-- Objective side-by-side metric matrix: Stars, Forks, Open Issues, Health Score, Component Pillar Scores, Primary Language, and License.
-- Visual comparative bar charts for direct visual comparison.
-- Strict adherence to objective metric presentation: NO biased "winner", "loser", or "#1" language.
-
----
-
-## 📈 Repository History & Historical Health Timeline
-
-- **Catalog (`/history/`):** Full audit of previously analyzed repositories with search filtering and sorting (recently analyzed, health score, star count, alphabetical).
-- **Historical Timeline (`/history/<owner>/<repo>/`):** Evaluates score progression across multiple evaluation runs over time with Chart.js time-series plots.
-
----
-
-## 📂 Directory Structure
+## Project Structure
 
 ```text
 OpenSourceLens/
-├── config/                     # Django project configuration
-│   ├── settings.py             # Settings, PostgreSQL connection, resilient fallback
-│   ├── urls.py                 # Root URL router
-│   ├── asgi.py
-│   └── wsgi.py
-├── dashboard/                  # Core analytics application
+│
+├── config/                          # Django project configuration
+│   ├── settings.py                  # Database settings, logging, API timeouts, caching
+│   ├── urls.py                      # Main URL routing configuration
+│   ├── asgi.py                      # ASGI entrypoint
+│   └── wsgi.py                      # WSGI production entrypoint
+│
+├── dashboard/                       # Core application
 │   ├── analytics/
 │   │   ├── __init__.py
-│   │   └── analytics_engine.py # Pandas processing, commit/issue/PR/health math
+│   │   └── analytics_engine.py      # Pandas data processing, statistics, HHI, 5 pillars
+│   │
 │   ├── services/
 │   │   ├── __init__.py
-│   │   └── github_service.py   # GitHub REST API client (commits, issues, PRs)
-│   ├── migrations/             # Database migrations
+│   │   ├── github_service.py        # GitHub REST client, pagination, error handling
+│   │   ├── analysis_service.py      # Ingestion coordinator, cache verification, DB sync
+│   │   └── repository_service.py    # History catalog, historical detail, comparison
+│   │
+│   ├── utils/
+│   │   ├── __init__.py
+│   │   └── formatting.py            # Metric and byte size formatters (1.2K, 3.4M, MB/GB)
+│   │
+│   ├── migrations/                  # Schema migrations
 │   │   ├── 0001_initial.py
-│   │   └── 0002_pullrequest_closed_at_pullrequest_title_and_more.py
-│   ├── models.py               # Repository, Contributor, CommitActivity, Issue, PR, RepositoryAnalysis
-│   ├── views.py                # Views for Home, Analyze, History, Detail, Compare, About
-│   ├── forms.py                # Search and Comparison form validation
-│   ├── urls.py                 # Application URL endpoints
-│   └── admin.py                # Django admin registration
+│   │   ├── 0002_pullrequest_closed_at_...py
+│   │   └── 0003_repository_has_issues_...py
+│   │
+│   ├── models.py                    # Relational schema (Repository, Issue, PR, Analysis)
+│   ├── forms.py                     # RepositorySearchForm and RepositoryCompareForm
+│   ├── views.py                     # Thin request/response view controllers
+│   ├── urls.py                      # Dashboard application route definitions
+│   └── admin.py                     # Django Admin registration
+│
+├── templates/                       # Semantic HTML5 Templates
+│   ├── base.html                    # Universal master shell, navbar, footer, Chart.js
+│   ├── home.html                    # Search hero, scope selector, truthful loading steps
+│   ├── dashboard.html               # Multi-level analytical dashboard with coverage banners
+│   ├── history.html                 # Searchable, sortable repository history catalog
+│   ├── history_detail.html          # Historical health audit log & progression timeline
+│   ├── compare.html                 # Multi-repository comparative matrix & dual charts
+│   ├── about.html                   # Methodology documentation, limits, OST syllabus mapping
+│   └── errors/                      # Branded error pages
+│       ├── 400.html                 # Bad Request error view
+│       ├── 404.html                 # Resource Not Found error view
+│       └── 500.html                 # Internal Server Error view
+│
 ├── static/
-│   ├── css/style.css           # Developer analytics design system
-│   └── js/app.js               # Validation, multi-step loading overlay, shortcuts
-├── templates/
-│   ├── base.html               # Shared navbar, Chart.js 4.4, footer
-│   ├── home.html               # Search hero and quick-select pills
-│   ├── dashboard.html          # Interactive multi-level analytics dashboard
-│   ├── history.html            # Searchable repository catalog
-│   ├── history_detail.html     # Historical audit log and health timeline
-│   ├── compare.html            # Multi-repository comparative matrix & charts
-│   ├── about.html              # System architecture and methodology docs
-│   └── errors/                 # Error templates (400, 404, 500)
-├── tests/                      # Automated test suite (37 tests)
-│   ├── test_validation.py      # Input format & regex tests
-│   ├── test_github_service.py  # Mocked API client tests
-│   ├── test_models.py          # ORM relationships & cascade checks
-│   ├── test_analytics.py       # Pandas data processing & scoring tests
-│   └── test_views.py           # View integration & comparison tests
-├── .env                        # Environment secrets (ignored by Git)
-├── .gitignore                  # Git ignore rules
-├── manage.py                   # Django management CLI
-└── README.md                   # Project documentation
+│   ├── css/
+│   │   └── style.css                # Polished developer-tool CSS design system
+│   └── js/
+│       └── app.js                   # Form validation, loading progress, keyboard navigation
+│
+├── tests/                           # Complete automated test suite (63 Tests)
+│   ├── test_validation.py           # Input regex and repository format validation
+│   ├── test_github_service.py       # Mocked GitHub API, pagination, rate-limit, timeout tests
+│   ├── test_models.py               # Database constraints, foreign keys, cascade, transactions
+│   ├── test_analytics.py            # Pandas computations, median resilience, HHI, health math
+│   └── test_views.py                # View lifecycles, caching, configurable windows, edge cases
+│
+├── .env.example                     # Environment variable template
+├── .gitignore                       # Git ignore rules (excludes .env, db.sqlite3, pycache)
+├── manage.py                        # Django CLI entrypoint
+├── requirements.txt                 # Pinned project dependencies
+└── README.md                        # Platform engineering documentation
 ```
 
 ---
 
-## 🚀 Quick Start Guide
+## GitHub API Integration
 
-### 1. Set Up Environment & Install Dependencies
+### Reusable Pagination Engine
+The GitHub service implements an autonomous `_paginate()` method that iterates through GitHub API pages (`?page=X&per_page=Y`) until:
+1. The requested limit is reached (e.g. 100 commits or issues).
+2. The endpoint returns no more records or returns a page with fewer items than `per_page`.
+3. An API error occurs or the safe internal ceiling (`max_pages=10`) is reached.
+
+### Resilient Error Handling
+All external requests to GitHub are bounded by a configurable timeout (`12s` default). The client maps HTTP statuses to typed domain exceptions:
+- **HTTP 404:** `GitHubRepoNotFoundError` — Returns a helpful message instructing the user to verify repository visibility.
+- **HTTP 401:** `GitHubAPIError` — Flags bad or expired `GITHUB_TOKEN` credentials.
+- **HTTP 403 / 429:** `GitHubRateLimitExceededError` — Reads `x-ratelimit-reset` headers and outputs the exact UTC time when limits refresh.
+- **HTTP 500 / 502 / 503:** `GitHubAPIError` — Handles transient upstream GitHub server outages gracefully.
+- **Network Timeouts / Drops:** `GitHubTimeoutError` / `GitHubAPIError` — Informs user of network failure without exposing raw tracebacks.
+
+### In-Memory and Relational Caching
+To prevent redundant API queries, analyses are cached for 60 minutes (`ANALYSIS_CACHE_FRESHNESS_MINUTES`). When a user analyzes a repository, the platform checks if an analysis matching the selected time window already exists within the freshness threshold. Users can bypass the cache at any time using the **Refresh Analysis** action (`?refresh=true`).
+
+---
+
+## Database Schema
+
+The database model separates current repository state from historical analysis snapshots:
+
+```text
+┌─────────────────────────────────┐
+│           Repository            │
+├─────────────────────────────────┤
+│ id (PK)                         │
+│ full_name (Unique, Indexed)     │
+│ owner, name                     │
+│ stars, forks, watchers          │
+│ open_issues, default_branch     │
+│ license, license_spdx           │
+│ language, size, topics (JSON)   │
+│ is_archived, is_fork            │
+│ has_issues, has_wiki, has_pages │
+│ created_at, updated_at, pushed_at│
+│ fetched_at                      │
+└───────────────┬─────────────────┘
+                │ 1:N
+        ┌───────┴───────┬────────────────┬────────────────┬───────────────┐
+        ▼               ▼                ▼                ▼               ▼
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌───────────────────┐
+│   Language   │ │ Contributor  │ │CommitActivity│ │    Issue     │ │    PullRequest    │
+├──────────────┤ ├──────────────┤ ├──────────────┤ ├──────────────┤ ├───────────────────┤
+│ repository_id│ │ repository_id│ │ repository_id│ │ repository_id│ │ repository_id     │
+│ language     │ │ username     │ │ date         │ │ issue_number │ │ pr_number         │
+│ bytes        │ │ contributions│ │ commit_count │ │ title, state │ │ title, state      │
+│ percentage   │ │ avatar_url   │ └──────────────┘ │ created_at   │ │ created_at        │
+└──────────────┘ └──────────────┘                  │ closed_at    │ │ closed_at         │
+                                                   └──────────────┘ │ merged_at         │
+                                                                    └───────────────────┘
+                                        │ 1:N
+                                        ▼
+                        ┌─────────────────────────────────┐
+                        │       RepositoryAnalysis        │
+                        ├─────────────────────────────────┤
+                        │ id (PK)                         │
+                        │ repository_id (FK)              │
+                        │ health_score, health_tier       │
+                        │ activity_score, issue_score     │
+                        │ pr_score, contributor_score     │
+                        │ maintenance_score               │
+                        │ stars, forks, open_issues       │
+                        │ commit_count, contributors_count│
+                        │ prs_count                       │
+                        │ issue_resolution_rate           │
+                        │ pr_merge_rate                   │
+                        │ analysis_window (30d/90d/etc)   │
+                        │ data_coverage (JSON)            │
+                        │ analyzed_at (Timestamp)         │
+                        └─────────────────────────────────┘
+```
+
+### Constraints & Indexes
+- Unique constraints prevent duplicate entries (`(repository, username)`, `(repository, issue_number)`, `(repository, pr_number)`, `(repository, date)`).
+- Foreign keys use `on_delete=models.CASCADE` to ensure clean orphan removal when a repository is deleted.
+- Analysis writes are wrapped in `transaction.atomic()` to guarantee that snapshots and child entity tables are committed consistently.
+
+---
+
+## Analytics Methodology
+
+The analytics engine uses **Pandas** for all data normalization:
+
+1. **Commit Analytics:**
+   - Datetime parsing converts ISO timestamps into UTC time-series indices.
+   - Computes daily activity frequency, 7-day rolling velocity, and days elapsed since latest commit.
+2. **Issue Management:**
+   - Resolves true issue tickets separately from pull requests.
+   - Calculates **median resolution days** rather than average to prevent historical outlier tickets (e.g. issues open for 3 years) from distorting metrics.
+   - Evaluates old unresolved backlog count (>90 days old).
+3. **Pull Request Turnaround:**
+   - Quantifies merge throughput: $\text{Merge Rate} = (\text{Merged PRs} / \text{Analyzed PRs}) \times 100$.
+   - Computes median turnaround hours between PR creation and merge events.
+4. **Contributor Concentration (Herfindahl-Hirschman Index):**
+   - Measures community maintainer dependency using the economic HHI formula:
+     $$\text{HHI} = \sum_{i=1}^{N} \left(\frac{\text{Contributions}_i}{\sum \text{Contributions}} \times 100\right)^2$$
+   - Categorized objectively:
+     - $\text{HHI} \le 1,500$: *Well-distributed maintainer base*
+     - $1,500 < \text{HHI} \le 2,500$: *Moderate maintainer concentration*
+     - $\text{HHI} > 2,500$: *High maintainer concentration*
+5. **Language Composition:**
+   - Normalizes raw byte counts into rounded percentages ensuring $\sum P_i = 100.0\%$.
+
+---
+
+## Health Score Formula
+
+The OpenSourceLens **Health Score** is a composite metric (0–100) structured around five deterministic engineering pillars:
+
+$$\text{Health Score} = 0.25 \times S_{\text{activity}} + 0.20 \times S_{\text{issue}} + 0.20 \times S_{\text{pr}} + 0.15 \times S_{\text{contributor}} + 0.20 \times S_{\text{maintenance}}$$
+
+| Pillar | Weight | Signals Evaluated | Formula / Logic |
+| :--- | :---: | :--- | :--- |
+| **Activity** | **25%** | Commit recency, commit velocity, weekly frequency | - **Recency:** $\le 3\text{d} \to 95$, $\le 7\text{d} \to 90$, $\le 30\text{d} \to 80$, $>180\text{d} \to 30$<br>- **Velocity:** Scaled up to 100 based on average commits per active day. |
+| **Issue Management** | **20%** | Sample resolution rate, median close days, backlog age | - **Resolution Rate:** Up to 50 pts.<br>- **Median Close Time:** $\le 3\text{d} \to 30\text{ pts}$, $\le 14\text{d} \to 20\text{ pts}$, $>60\text{d} \to 5\text{ pts}$.<br>- **Backlog:** Penalty applied for old open issues (>90d). |
+| **PR Activity** | **20%** | Merge rate, merge turnaround speed, open volume | - **Merge Rate:** Scaled up to 60 pts.<br>- **Turnaround:** $\le 24\text{h} \to 40\text{ pts}$, $\le 7\text{d} \to 30\text{ pts}$, $>30\text{d} \to 10\text{ pts}$. |
+| **Contributor Diversity** | **15%** | Contributor volume, maintainer concentration (HHI) | - **Base:** Evaluates recorded contributor count.<br>- **Concentration:** Low HHI ($<1500$) receives full marks; single-maintainer dominance ($>5000$) receives lower resilience scores. |
+| **Maintenance & Hygiene** | **20%** | License presence, project description, archive status | - Valid OSI-compliant license detected (+35 pts).<br>- Clear repository description (+20 pts).<br>- Project topics defined (+15 pts).<br>- Active non-archived, non-forked status (+30 pts). |
+
+### Score Categories
+- **85–100:** *Excellent* — Highly active, structured triage, resilient community.
+- **70–84:** *Good* — Consistent development with manageable issue backlogs.
+- **50–69:** *Moderate* — Slower review turnaround or higher maintainer dependency.
+- **0–49:** *At Risk* — Stagnant commit activity or lack of active maintenance.
+
+> **Methodology Note:** These categories are analytical indicators defined by OpenSourceLens for comparative research and should not be interpreted as absolute software-quality verdicts.
+
+---
+
+## Data Coverage
+
+To guarantee transparency, OpenSourceLens explicitly documents analysis scope on every dashboard view:
+
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│  DATA COVERAGE TRANSPARENCY                                            │
+│  Scope: Last 90 Days  │  Commits: 100 Analyzed  │  Issues: 84 Analyzed │
+│  Pull Requests: 100 Analyzed  │  Contributors: Top 30 Recorded        │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+- When telemetry is scarce (e.g. 0 commits in window or 0 issues open), the platform displays dedicated notice cards (e.g., *"Insufficient issue history for monthly comparison"*), preventing distorted charts.
+
+---
+
+## Installation
+
+### Prerequisites
+- Python 3.11 or newer
+- PostgreSQL 14+ (or SQLite for development)
+- Git
+
+### 1. Clone Repository & Create Virtual Environment
 ```bash
-cd d:\sem5\OST\assi
+git clone https://github.com/your-username/OpenSourceLens.git
+cd OpenSourceLens
 python -m venv venv
+
+# Windows
 .\venv\Scripts\activate
+
+# macOS / Linux
+source venv/bin/activate
+```
+
+### 2. Install Dependencies
+```bash
 pip install -r requirements.txt
 ```
 
-### 2. Configure Environment (`.env`)
+---
+
+## Environment Variables
+
+Copy `.env.example` to create your local `.env`:
+
+```bash
+cp .env.example .env
+```
+
+Configure settings in `.env`:
+
 ```env
+# Application Settings
 DEBUG=True
-SECRET_KEY=django-insecure-opensourcelens-ost-project-key-2026-super-secure
+SECRET_KEY=django-insecure-opensourcelens-production-grade-key-2026-secure
 ALLOWED_HOSTS=127.0.0.1,localhost
 
-# GitHub Personal Access Token (Optional: increases API limit to 5,000/hr)
+# GitHub REST API Token (Optional: increases rate limit from 60 to 5,000 requests/hr)
 GITHUB_TOKEN=
 
-# Database Configuration (PostgreSQL)
+# Database Settings (PostgreSQL Primary)
 DB_ENGINE=django.db.backends.postgresql
 DB_NAME=opensourcelens
 DB_USER=postgres
 DB_PASSWORD=your_postgres_password
 DB_HOST=127.0.0.1
 DB_PORT=5432
-```
 
-### 3. Run Migrations & Start Server
-```bash
-python manage.py makemigrations
-python manage.py migrate
-python manage.py runserver
-```
+# SQLite Development Fallback (Set to True for offline/quick local dev)
+USE_SQLITE=False
 
-Open: **`http://127.0.0.1:8000/`**
+# Cache Freshness Threshold (Minutes)
+ANALYSIS_CACHE_FRESHNESS_MINUTES=60
+
+# GitHub Request Timeout (Seconds)
+GITHUB_API_TIMEOUT=12
+```
 
 ---
 
-## 🧪 Running Automated Tests (37 Tests)
+## PostgreSQL Setup
 
-Run the full automated test suite:
+### 1. Create PostgreSQL Database
+Using `psql` or pgAdmin:
 
-```bash
-python manage.py test tests
+```sql
+CREATE DATABASE opensourcelens;
+CREATE USER postgres WITH PASSWORD 'your_postgres_password';
+GRANT ALL PRIVILEGES ON DATABASE opensourcelens TO postgres;
 ```
 
-Output:
+### 2. Run Database Migrations
+```bash
+python manage.py makemigrations
+python manage.py migrate
+```
+
+---
+
+## Running the Project
+
+Start the local development server:
+
+```bash
+python manage.py runserver
+```
+
+Open your browser to: **`http://127.0.0.1:8000/`**
+
+### Available Routes:
+- `/` — Homepage with search bar, configurable time windows, and quick-sample repositories.
+- `/analyze/` — Deep repository intelligence dashboard.
+- `/history/` — Searchable catalog of analyzed repositories with score changes.
+- `/history/<owner>/<repo>/` — Historical health audit log & progression timeline.
+- `/compare/` — Multi-repository side-by-side benchmarking.
+- `/about/` — Complete methodology, limitations, and OST syllabus documentation.
+
+---
+
+## Testing
+
+The project includes an automated test suite with **63 test cases** covering every layer of the system. Tests use Python's `unittest.mock` to mock external GitHub API calls and run against an isolated SQLite test database with zero external network or database dependencies.
+
+Run the test suite:
+
+```bash
+python manage.py test
+```
+
+### Test Coverage Highlights:
+- **`tests/test_validation.py` (7 tests):** Format validation for `owner/repo` formats, URLs, and edge-case syntax.
+- **`tests/test_github_service.py` (12 tests):** Pagination pagination cycles, HTTP 404, HTTP 401, HTTP 403/429 rate limit reset parsing, HTTP 500 server errors, request timeouts, and malformed JSON.
+- **`tests/test_models.py` (9 tests):** Database relationships, cascading deletes, unique constraints, and atomic transaction rollback.
+- **`tests/test_analytics.py` (17 tests):** Pandas time-series grouping, outlier-resilient median close times, HHI concentration calculations, and zero-division edge cases.
+- **`tests/test_views.py` (18 tests):** View lifecycles, caching verification, force refresh (`?refresh=true`), configurable window parameters (`30d`, `90d`, `180d`, `365d`), error redirects, and edge-case repositories (0 issues, 0 PRs, single contributor, archived, and forked repos).
+
 ```text
-Found 37 test(s).
+Found 63 test(s).
 System check identified no issues (0 silenced).
-.....................................
+...............................................................
 ----------------------------------------------------------------------
-Ran 37 tests in 0.135s
+Ran 63 tests in 0.422s
 
 OK
 ```
 
 ---
 
-## 🎓 OST Academic Alignment & Viva Guide
+## Screenshots
 
-### Frequently Asked Viva Questions:
-1. **Why Django for the backend?**
-   - Provides a clean Model-View-Template (MVT) architecture, built-in ORM with SQL transaction management, form validation, and robust security against CSRF/XSS.
-2. **Why PostgreSQL?**
-   - Real-world relational database storing complex relations: Repositories $\to$ Languages, Contributors, Issues, Pull Requests, Commit Activities, and Analysis snapshots.
-3. **Why Pandas?**
-   - Ideal for vectorized time-series aggregation, datetime arithmetic (turnaround duration), grouping, and percentage distributions without raw SQL loops.
-4. **Why not judge projects as "Best" or "Winner"?**
-   - OpenSourceLens provides objective engineering telemetry. Metrics like high contributor concentration or low merge rate indicate community dynamics rather than moral judgments.
-5. **How are GitHub API limits respected?**
-   - Service inspects `x-ratelimit-remaining` headers, handles 403s with user-friendly notices, and supports optional Bearer token authentication for 5,000 requests/hour.
+| View | Purpose |
+| :--- | :--- |
+| **Search & Discovery (`/`)** | Hero search with analysis window selector (30D, 90D, 6M, 1Y) and quick sample pills. |
+| **Repository Header & Pillars (`/analyze/`)** | High-level metadata badges and 5-pillar health score breakdown with drivers. |
+| **Time-Series Velocity (`/analyze/`)** | Interactive Chart.js commit activity graph with 30D / 90D / 6M / 1Y range toggles. |
+| **Triage & Turnaround (`/analyze/`)** | Side-by-side cards for Issue Management and Pull Request status distribution. |
+| **Community & Concentration (`/analyze/`)** | Contributor leaderboard with avatar icons, contribution counts, and HHI rating. |
+| **Technology Breakdown (`/analyze/`)** | Normalized language composition with Doughnut chart and byte table. |
+| **Repository Comparison (`/compare/`)** | Objective side-by-side comparative matrix and comparative bar charts. |
+| **Historical Audit Log (`/history/`)** | Searchable audit trail showing health score changes over time. |
+
+---
+
+## API / Error Handling
+
+The application provides graceful, user-friendly error experiences without raw stack trace leaks:
+
+- **Repository Not Found (404):** Redirects to home with an informative notification: *"Repository 'owner/repo' was not found on GitHub. Please verify the name and ensure it is public."*
+- **Rate Limit Exceeded (403/429):** Calculates and displays the exact time of limit reset: *"GitHub API rate limit reached. Rate limit resets at 14:30:00 UTC. Please configure a GITHUB_TOKEN."*
+- **Network Timeout:** Returns: *"GitHub request timed out. Please try again."*
+- **Custom HTTP Error Pages:** Dedicated templates for `400.html` (Bad Request), `404.html` (Page Not Found), and `500.html` (Server Error) maintaining consistent branding and clear navigation.
+
+---
+
+## Security Considerations
+
+- **Secrets Management:** Sensitive configuration (`SECRET_KEY`, `GITHUB_TOKEN`, database passwords) is isolated in `.env` files and excluded from Git version control via `.gitignore`.
+- **Server-Side Token Isolation:** GitHub tokens are never passed to templates or exposed to browser JavaScript.
+- **CSRF & XSS Protection:** Django's CSRF middleware is enforced on all state-altering requests. JSON chart payloads are serialized safely with template escaping.
+- **SQL Injection Defense:** All database queries utilize Django ORM parameterized queries with `select_related()` and `prefetch_related()`.
+- **Database Transactions:** Analysis persistence is protected by `transaction.atomic()` to prevent partially saved or corrupted records.
+
+---
+
+## OST Syllabus Mapping
+
+This project directly demonstrates core principles of the **Open Source Technologies (OST)** academic curriculum:
+
+| OST Syllabus Topic | OpenSourceLens Implementation | Academic Concept Demonstrated |
+| :--- | :--- | :--- |
+| **1. Git & Version Control** | Git commits, branch workflows, and clean commit history. | Distributed version control, patch tracking, and source control hygiene. |
+| **2. GitHub Ecosystem** | Ingestion of public repositories via GitHub REST API v3. | Open-source ecosystem collaboration, public issue tracking, and PR review workflows. |
+| **3. Backend Web Framework** | Django 5.0+ Model-View-Template (MVT) architecture. | URL routing, thin controllers, service layer decoupling, and forms validation. |
+| **4. Relational Database** | PostgreSQL 16 schema with foreign keys, indexes, and transactions. | ACID transactions, database normalization, relational integrity, and query optimization. |
+| **5. Data Science & Analytics** | Pandas dataframes, datetime arithmetic, and quantile medians. | Exploratory data analysis, statistical aggregation, and outlier mitigation. |
+| **6. Frontend & Responsive UI** | Bootstrap 5.3, semantic HTML5, and accessible Vanilla CSS design system. | Responsive design, modern developer tool aesthetics, and UI component hierarchies. |
+| **7. Interactive Visualization** | Chart.js 4.4 Canvas rendering with dynamic range filtering. | Visual communication of time-series data, distributions, and comparative metrics. |
+| **8. CRUD & Data Lifecycle** | Repository history catalog, detail inspection, and snapshot updates. | Create, Read, Update, and Delete operations with atomic persistence. |
+| **9. Automated Quality Assurance** | 63 automated tests using `unittest` and `unittest.mock`. | Unit testing, integration testing, edge-case coverage, and mocking external services. |
+| **10. Open Source Licensing** | SPDX license detection, project documentation check, and MIT License. | Open-source governance, copyleft vs. permissive licensing, and project sustainability. |
+
+---
+
+## Future Scope
+
+1. **GitHub GraphQL API Integration:** Reducing round-trip network requests for deep issue/PR thread analysis.
+2. **CI/CD Pipeline Telemetry:** Inspecting GitHub Actions workflow success rates and average test execution times.
+3. **Automated Weekly Email Reports:** Subscribing to tracked repositories for automated maintainability alerts.
+4. **Dependencies & Vulnerability Scanning:** Correlating repository dependencies with open CVE databases.
+
+---
+
+## License
+
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details. Built for educational and analytical purposes as part of the Open Source Technologies (OST) curriculum.

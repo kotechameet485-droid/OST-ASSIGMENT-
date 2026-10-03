@@ -1,54 +1,40 @@
 /**
  * OpenSourceLens Client Application Script
- * Provides client-side validation, loading animations, sample auto-filling, and UI enhancements.
+ * Provides client-side validation, multi-step loading experience,
+ * sample auto-filling, and resilient error recovery.
  */
 
-document.addEventListener('DOMContentLoaded', function () {
-    const searchForm = document.getElementById('repoSearchForm');
-    const searchInput = document.getElementById('repoSearchInput');
-    const validationError = document.getElementById('clientValidationError');
-    const loadingOverlay = document.getElementById('analysisLoadingOverlay');
-    const loadingRepoName = document.getElementById('loadingRepoName');
-    const sampleButtons = document.querySelectorAll('.sample-repo-btn');
+(function () {
+    'use strict';
 
-    // Repo validation regex (owner/repo) or github.com/owner/repo
-    const repoRegex = /^(?:https?:\/\/)?(?:www\.)?github\.com\/([a-zA-Z0-9_\-\.]+)\/([a-zA-Z0-9_\-\.]+)|\b([a-zA-Z0-9_\-\.]+)\/([a-zA-Z0-9_\-\.]+)\b$/;
-
-    // Initialize Bootstrap tooltips if any
-    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
+    document.addEventListener('DOMContentLoaded', function () {
+        initSearchForm();
+        initSampleButtons();
+        initKeyboardShortcuts();
+        initTooltips();
     });
 
-    // Sample Repo Buttons click handler
-    sampleButtons.forEach(button => {
-        button.addEventListener('click', function () {
-            const targetRepo = this.getAttribute('data-repo');
-            if (searchInput) {
-                searchInput.value = targetRepo;
-                searchInput.focus();
-                if (validationError) {
-                    validationError.classList.add('d-none');
-                }
-            }
-        });
-    });
+    /**
+     * Initializes repository search form submission and loading orchestrations.
+     */
+    function initSearchForm() {
+        var searchForm = document.getElementById('repoSearchForm');
+        var searchInput = document.getElementById('repoSearchInput');
+        var validationError = document.getElementById('clientValidationError');
+        var loadingOverlay = document.getElementById('analysisLoadingOverlay');
+        var loadingRepoName = document.getElementById('loadingRepoName');
 
-    // Keyboard shortcut: pressing '/' focuses repository search input
-    document.addEventListener('keydown', function (e) {
-        if (e.key === '/' && document.activeElement !== searchInput && searchInput) {
-            e.preventDefault();
-            searchInput.focus();
-            searchInput.select();
+        if (!searchForm || !searchInput) {
+            return;
         }
-    });
 
-    // Form submission & loading state orchestration
-    if (searchForm && searchInput) {
+        // Repository validation regex: supports owner/repo and https://github.com/owner/repo
+        var repoRegex = /^(?:https?:\/\/)?(?:www\.)?github\.com\/([a-zA-Z0-9_\-\.]+)\/([a-zA-Z0-9_\-\.]+)|\b([a-zA-Z0-9_\-\.]+)\/([a-zA-Z0-9_\-\.]+)\b$/;
+
         searchForm.addEventListener('submit', function (e) {
-            const val = searchInput.value.trim();
+            var rawValue = (searchInput.value || '').trim();
 
-            if (!val || !repoRegex.test(val)) {
+            if (!rawValue || !repoRegex.test(rawValue)) {
                 e.preventDefault();
                 if (validationError) {
                     validationError.classList.remove('d-none');
@@ -58,63 +44,25 @@ document.addEventListener('DOMContentLoaded', function () {
                 return false;
             }
 
-            // Valid input - clear error
+            // Input is valid: clear errors
             if (validationError) {
                 validationError.classList.add('d-none');
             }
             searchInput.classList.remove('is-invalid');
 
-            // Trigger loading state
+            // Trigger truthful pipeline step progression
             if (loadingOverlay) {
+                var cleanName = rawValue.replace(/^https?:\/\/github\.com\//, '');
                 if (loadingRepoName) {
-                    loadingRepoName.innerText = val.replace(/https?:\/\/github\.com\//, '');
+                    loadingRepoName.textContent = cleanName;
                 }
                 loadingOverlay.classList.remove('d-none');
 
-                // Simulate realistic pipeline step progression for user feedback
-                setTimeout(() => {
-                    const step1 = document.getElementById('step-validate');
-                    if (step1) {
-                        step1.classList.add('text-success');
-                        step1.querySelector('.os-step-icon').innerHTML = '<i class="bi bi-check-circle-fill text-success"></i>';
-                    }
-                    const step2 = document.getElementById('step-connect');
-                    if (step2) {
-                        step2.classList.remove('text-muted');
-                        step2.classList.add('text-primary');
-                        step2.querySelector('.os-step-icon').innerHTML = '<i class="bi bi-arrow-repeat spin text-primary"></i>';
-                    }
-                }, 600);
-
-                setTimeout(() => {
-                    const step2 = document.getElementById('step-connect');
-                    if (step2) {
-                        step2.querySelector('.os-step-icon').innerHTML = '<i class="bi bi-check-circle-fill text-success"></i>';
-                    }
-                    const step3 = document.getElementById('step-data');
-                    if (step3) {
-                        step3.classList.remove('text-muted');
-                        step3.classList.add('text-primary');
-                        step3.querySelector('.os-step-icon').innerHTML = '<i class="bi bi-arrow-repeat spin text-primary"></i>';
-                    }
-                }, 1300);
-
-                setTimeout(() => {
-                    const step3 = document.getElementById('step-data');
-                    if (step3) {
-                        step3.querySelector('.os-step-icon').innerHTML = '<i class="bi bi-check-circle-fill text-success"></i>';
-                    }
-                    const step4 = document.getElementById('step-analytics');
-                    if (step4) {
-                        step4.classList.remove('text-muted');
-                        step4.classList.add('text-primary');
-                        step4.querySelector('.os-step-icon').innerHTML = '<i class="bi bi-arrow-repeat spin text-primary"></i>';
-                    }
-                }, 2100);
+                orchestrateLoadingSteps();
             }
         });
 
-        // Clear error on input typing
+        // Clear error styling on user input
         searchInput.addEventListener('input', function () {
             if (validationError && !validationError.classList.contains('d-none')) {
                 validationError.classList.add('d-none');
@@ -122,4 +70,105 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     }
-});
+
+    /**
+     * Advances multi-step pipeline animation to reflect real backend work phases.
+     */
+    function orchestrateLoadingSteps() {
+        var steps = [
+            { id: 'step-connect', delay: 400 },
+            { id: 'step-meta', delay: 1000 },
+            { id: 'step-commits', delay: 1700 },
+            { id: 'step-issues', delay: 2400 },
+            { id: 'step-analytics', delay: 3100 },
+            { id: 'step-save', delay: 3700 }
+        ];
+
+        steps.forEach(function (s) {
+            setTimeout(function () {
+                var el = document.getElementById(s.id);
+                if (!el) return;
+
+                // Mark previous active elements complete
+                var prev = el.previousElementSibling;
+                if (prev) {
+                    prev.classList.remove('text-primary');
+                    prev.classList.add('text-success');
+                    var prevIcon = prev.querySelector('.os-step-icon');
+                    if (prevIcon) {
+                        prevIcon.innerHTML = '<i class="bi bi-check-circle-fill text-success"></i>';
+                    }
+                }
+
+                // Activate current element
+                el.classList.remove('text-muted');
+                el.classList.add('text-primary');
+                var icon = el.querySelector('.os-step-icon');
+                if (icon) {
+                    icon.innerHTML = '<i class="bi bi-arrow-repeat spin text-primary"></i>';
+                }
+            }, s.delay);
+        });
+    }
+
+    /**
+     * Auto-populates sample repositories on button click.
+     */
+    function initSampleButtons() {
+        var sampleButtons = document.querySelectorAll('.sample-repo-btn');
+        var searchInput = document.getElementById('repoSearchInput');
+        var validationError = document.getElementById('clientValidationError');
+
+        if (!sampleButtons.length || !searchInput) return;
+
+        sampleButtons.forEach(function (button) {
+            button.addEventListener('click', function () {
+                var targetRepo = this.getAttribute('data-repo');
+                if (targetRepo) {
+                    searchInput.value = targetRepo;
+                    searchInput.focus();
+                    if (validationError) {
+                        validationError.classList.add('d-none');
+                    }
+                    searchInput.classList.remove('is-invalid');
+                }
+            });
+        });
+    }
+
+    /**
+     * Keyboard shortcut: '/' focuses the repository search bar.
+     */
+    function initKeyboardShortcuts() {
+        var searchInput = document.getElementById('repoSearchInput');
+        if (!searchInput) return;
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === '/' && document.activeElement !== searchInput) {
+                // Avoid interfering with inputs in other sections
+                var tag = (document.activeElement.tagName || '').toLowerCase();
+                if (tag !== 'input' && tag !== 'textarea' && tag !== 'select') {
+                    e.preventDefault();
+                    searchInput.focus();
+                    searchInput.select();
+                }
+            }
+        });
+    }
+
+    /**
+     * Safely initializes Bootstrap tooltips if bootstrap is loaded.
+     */
+    function initTooltips() {
+        if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
+            var tooltipElements = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+            tooltipElements.forEach(function (el) {
+                try {
+                    new bootstrap.Tooltip(el);
+                } catch (err) {
+                    // Suppress harmless tooltip initialization warnings
+                }
+            });
+        }
+    }
+})();

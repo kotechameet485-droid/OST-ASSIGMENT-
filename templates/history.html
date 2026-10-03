@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Repository History — OpenSourceLens{% endblock %}
+{% block title %}Repository History & Health Tracking — OpenSourceLens{% endblock %}
 
 {% block content %}
 <div class="py-5">
@@ -9,7 +9,7 @@
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4 pb-3 border-bottom">
             <div>
                 <h1 class="h3 fw-bold text-dark mb-1">Repository History Catalog</h1>
-                <p class="text-secondary small mb-0">Persisted repository intelligence, health scores, and historical analysis snapshots</p>
+                <p class="text-secondary small mb-0">Persisted repository intelligence, health score progression, and historical snapshots</p>
             </div>
             <a href="{% url 'home' %}#search-section" class="btn btn-sm os-btn-primary">
                 <i class="bi bi-plus-lg me-1"></i> Analyze New Repository
@@ -17,12 +17,12 @@
         </div>
 
         <!-- Search & Filter Controls -->
-        <div class="card border shadow-sm p-3 mb-4 bg-white">
+        <div class="card border shadow-xs p-3 mb-4 bg-white">
             <form method="GET" action="{% url 'history' %}" class="row g-2 align-items-center">
                 <div class="col-md-7">
                     <div class="input-group">
                         <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                        <input type="text" name="q" value="{{ query|default:'' }}" class="form-control border-start-0 ps-0" placeholder="Search by repository name, owner, or description...">
+                        <input type="text" name="q" value="{{ query|default:'' }}" class="form-control border-start-0 ps-0" placeholder="Search by repository name, owner, description, or language...">
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -49,10 +49,10 @@
                         <thead class="table-light">
                             <tr class="text-muted small">
                                 <th>Repository</th>
-                                <th>Health Score</th>
+                                <th>Latest Health</th>
+                                <th>Previous Health</th>
+                                <th>Score Change</th>
                                 <th>Stars</th>
-                                <th>Forks</th>
-                                <th>Open Issues</th>
                                 <th>Snapshots</th>
                                 <th>Last Analyzed</th>
                                 <th class="text-end">Actions</th>
@@ -62,8 +62,12 @@
                             {% for item in repo_list %}
                             <tr>
                                 <td>
-                                    <div class="fw-semibold text-dark font-monospace">{{ item.repo.full_name }}</div>
-                                    <div class="text-muted small text-truncate" style="max-width: 320px;">
+                                    <div class="fw-semibold text-dark font-monospace">
+                                        <a href="{% url 'analyze' %}?repo={{ item.repo.full_name }}" class="text-dark text-decoration-none hover-accent">
+                                            {{ item.repo.full_name }}
+                                        </a>
+                                    </div>
+                                    <div class="text-muted extra-small text-truncate" style="max-width: 320px;">
                                         {{ item.repo.description|default:"No description available." }}
                                     </div>
                                 </td>
@@ -79,9 +83,37 @@
                                         <span class="text-muted small">—</span>
                                     {% endif %}
                                 </td>
-                                <td class="font-monospace fw-semibold"><i class="bi bi-star-fill text-warning me-1"></i>{{ item.repo.stars }}</td>
-                                <td class="font-monospace text-secondary">{{ item.repo.forks }}</td>
-                                <td class="font-monospace text-secondary">{{ item.repo.open_issues }}</td>
+                                <td>
+                                    {% if item.previous_analysis %}
+                                        <span class="badge bg-light text-secondary border font-monospace">
+                                            {{ item.previous_analysis.health_score }} / 100
+                                        </span>
+                                    {% else %}
+                                        <span class="text-muted extra-small font-monospace">None recorded</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if item.health_change %}
+                                        {% if item.health_change.is_positive %}
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace">
+                                                <i class="bi bi-arrow-up-right me-1"></i>{{ item.health_change.display }}
+                                            </span>
+                                        {% elif item.health_change.is_negative %}
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle font-monospace">
+                                                <i class="bi bi-arrow-down-right me-1"></i>{{ item.health_change.display }}
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-light text-secondary border font-monospace">
+                                                ±0
+                                            </span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="badge bg-light text-muted border extra-small">Initial Snapshot</span>
+                                    {% endif %}
+                                </td>
+                                <td class="font-monospace fw-semibold">
+                                    <i class="bi bi-star-fill text-warning me-1"></i>{{ item.repo.stars }}
+                                </td>
                                 <td>
                                     <span class="badge bg-light text-secondary border font-monospace">{{ item.analyses_count }}</span>
                                 </td>
@@ -111,7 +143,7 @@
                         {% if query %}
                             No stored repositories match your query "{{ query }}". Try searching another term or analyze a new repository.
                         {% else %}
-                            Your intelligence database has no analyzed repositories yet. Start by analyzing any public GitHub project.
+                            Your database has no analyzed repositories yet. Start by analyzing any public GitHub project.
                         {% endif %}
                     </p>
                     <a href="{% url 'home' %}" class="btn os-btn-primary px-4">
