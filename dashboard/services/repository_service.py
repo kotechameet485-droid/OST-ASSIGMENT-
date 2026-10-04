@@ -8,7 +8,7 @@ import json
 import logging
 from typing import List, Dict, Any, Optional
 
-from django.db.models import Q
+from django.db.models import Q, Count
 from dashboard.models import Repository, RepositoryAnalysis
 from dashboard.analytics.analytics_engine import AnalyticsEngine, format_metric_number
 from dashboard.services.github_service import GitHubService
@@ -22,16 +22,24 @@ class RepositoryService:
     """
 
     @classmethod
-    def get_history_catalog(cls, query: str = '', sort_by: str = 'recent') -> List[Dict[str, Any]]:
+    def get_history_catalog(
+        cls,
+        query: str = '',
+        sort_by: str = 'recent',
+        window_filter: str = '',
+        lang_filter: str = '',
+        tier_filter: str = ''
+    ) -> List[Dict[str, Any]]:
         """
         Retrieves repositories from the database with annotations for:
         - Latest health score
         - Previous health score
         - Score difference / change (+X / -Y / 'First analysis')
-        - Total snapshots count
+        - Total snapshots count (via Count annotation to prevent N+1 queries)
         - Formatted star counts
+        - Server-side filtering by search query, language, analysis window, and health tier
         """
-        repos = Repository.objects.prefetch_related('languages', 'analyses').all()
+        repos = Repository.objects.annotate(analyses_total_count=Count('analyses')).prefetch_related('languages', 'analyses').all()
 
         if query:
             clean_q = query.strip()
@@ -41,6 +49,12 @@ class RepositoryService:
                 Q(owner__icontains=clean_q) |
                 Q(language__icontains=clean_q)
             )
+
+        if lang_filter:
+            repos = repos.filter(language__iexact=lang_filter.strip())
+
+        if window_filter:
+            repos = repos.filter(analyses__analysis_window=window_filter.strip()).distinct()
 
         # Base database sorting
         if sort_by == 'stars':
@@ -53,10 +67,20 @@ class RepositoryService:
         catalog_items: List[Dict[str, Any]] = []
 
         for r in repos:
-            analyses_qs = r.analyses.order_by('-analyzed_at')
-            all_analyses = list(analyses_qs[:2])
+            # Prefetched analyses sorted descending
+            all_analyses = sorted(r.analyses.all(), key=lambda a: a.analyzed_at, reverse=True)
+            if window_filter:
+                all_analyses = [a for a in all_analyses if a.analysis_window == window_filter]
+
             latest_analysis = all_analyses[0] if len(all_analyses) > 0 else None
             previous_analysis = all_analyses[1] if len(all_analyses) > 1 else None
+
+            # Optional health tier filtering
+            if tier_filter and latest_analysis:
+                if latest_analysis.health_tier.lower() != tier_filter.lower():
+                    continue
+            elif tier_filter and not latest_analysis:
+                continue
 
             health_change = None
             if latest_analysis and previous_analysis:
@@ -74,7 +98,7 @@ class RepositoryService:
                 'latest_analysis': latest_analysis,
                 'previous_analysis': previous_analysis,
                 'health_change': health_change,
-                'analyses_count': r.analyses.count(),
+                'analyses_count': getattr(r, 'analyses_total_count', len(all_analyses)),
                 'primary_language': r.language or 'Not specified',
             })
 
@@ -91,9 +115,10 @@ class RepositoryService:
     def get_history_detail(cls, owner: str, repo: str) -> Optional[Dict[str, Any]]:
         """
         Retrieves the complete audit trail and historical trend for a repository.
+        Uses select_related and prefetch_related for optimal query performance.
         """
         full_name = f"{owner}/{repo}"
-        repository = Repository.objects.filter(full_name__iexact=full_name).first()
+        repository = Repository.objects.prefetch_related('analyses', 'languages').filter(full_name__iexact=full_name).first()
         if not repository:
             return None
 
@@ -108,17 +133,23 @@ class RepositoryService:
         }
 
     @classmethod
-    def compare_repositories(cls, raw_candidates: List[str]) -> Optional[Dict[str, Any]]:
+    def compare_repositories(
+        cls,
+        raw_candidates: List[str],
+        window: str = '90d'
+    ) -> Optional[Dict[str, Any]]:
         """
         Compares 2 or 3 public GitHub repositories across health metrics,
         commit velocity, issues, pull requests, and maintainer concentration.
-        Uses existing database snapshots if available, or pulls live telemetry.
+        Always runs full, genuine AnalysisService pipeline if complete analysis
+        is missing, guaranteeing identical methodology and zero invented metrics.
         Strictly presents objective comparisons without 'winner' or 'best' declarations.
         """
         if len(raw_candidates) < 2:
             return None
 
-        service = GitHubService()
+        from dashboard.services.analysis_service import AnalysisService
+        analysis_service = AnalysisService()
         parsed_repos = []
 
         for raw in raw_candidates[:3]:
@@ -126,87 +157,75 @@ class RepositoryService:
                 owner, repo_name = GitHubService.validate_and_normalize(raw)
                 full_name = f"{owner}/{repo_name}"
 
-                db_repo = Repository.objects.filter(full_name__iexact=full_name).first()
-                latest_analysis = db_repo.analyses.order_by('-analyzed_at').first() if db_repo else None
+                # Always execute full analysis pipeline (reuses fresh cache if available)
+                analysis_context = analysis_service.run_analysis(
+                    owner=owner,
+                    repo_name=repo_name,
+                    window=window,
+                    force_refresh=False
+                )
 
-                if db_repo and latest_analysis:
-                    primary_lang = db_repo.languages.order_by('-bytes').first()
-                    parsed_repos.append({
-                        'name': db_repo.full_name,
-                        'owner': db_repo.owner,
-                        'repo': db_repo.name,
-                        'stars': db_repo.stars,
-                        'stars_formatted': format_metric_number(db_repo.stars),
-                        'forks': db_repo.forks,
-                        'forks_formatted': format_metric_number(db_repo.forks),
-                        'open_issues': db_repo.open_issues,
-                        'open_issues_formatted': format_metric_number(db_repo.open_issues),
-                        'health_score': latest_analysis.health_score,
-                        'health_tier': latest_analysis.health_tier,
-                        'activity_score': latest_analysis.activity_score,
-                        'issue_score': latest_analysis.issue_score,
-                        'pr_score': latest_analysis.pr_score,
-                        'contributor_score': latest_analysis.contributor_score,
-                        'maintenance_score': latest_analysis.maintenance_score,
-                        'primary_language': primary_lang.language if primary_lang else db_repo.language or 'Not specified',
-                        'license': db_repo.license or 'Not specified',
-                        'commits_count': latest_analysis.commits_count,
-                        'contributors_count': latest_analysis.contributors_count,
-                        'hhi': latest_analysis.data_coverage.get('hhi', 'N/A') if latest_analysis.data_coverage else 'N/A',
-                    })
-                else:
-                    # Fetch live metadata and quick score
-                    r_data = service.get_repository(owner, repo_name)
-                    langs_data = service.get_languages(owner, repo_name)
-                    contribs_data = service.get_contributors(owner, repo_name, limit=15)
-                    c_stats = AnalyticsEngine.calculate_contributor_statistics(contribs_data)
-                    health = AnalyticsEngine.calculate_health_score(
-                        repo_data=r_data,
-                        languages_data=langs_data,
-                        contributors=contribs_data,
-                        contrib_stats=c_stats,
-                    )
-                    lang_dist = AnalyticsEngine.calculate_language_distribution(langs_data)
+                repo_d = analysis_context['repo']
+                health_d = analysis_context['health']
+                cov_d = analysis_context.get('coverage', {})
+                c_stats = analysis_context.get('commit_stats', {})
+                iss_stats = analysis_context.get('issue_stats', {})
+                pr_stats = analysis_context.get('pr_stats', {})
+                contrib_stats = analysis_context.get('contributor_stats', {})
 
-                    parsed_repos.append({
-                        'name': r_data['full_name'],
-                        'owner': r_data['owner'],
-                        'repo': r_data['name'],
-                        'stars': r_data['stars'],
-                        'stars_formatted': format_metric_number(r_data['stars']),
-                        'forks': r_data['forks'],
-                        'forks_formatted': format_metric_number(r_data['forks']),
-                        'open_issues': r_data['open_issues'],
-                        'open_issues_formatted': format_metric_number(r_data['open_issues']),
-                        'health_score': health['total_score'],
-                        'health_tier': health['health_tier'],
-                        'activity_score': health['scores']['activity'],
-                        'issue_score': health['scores']['issue_management'],
-                        'pr_score': health['scores']['pr_activity'],
-                        'contributor_score': health['scores']['contributor_diversity'],
-                        'maintenance_score': health['scores']['maintenance'],
-                        'primary_language': lang_dist['primary_language'],
-                        'license': r_data['license'],
-                        'commits_count': 0,
-                        'contributors_count': len(contribs_data),
-                        'hhi': c_stats.get('hhi', 'N/A'),
-                    })
+                parsed_repos.append({
+                    'name': repo_d['full_name'],
+                    'owner': repo_d['owner'],
+                    'repo': repo_d['name'],
+                    'stars': repo_d['stars'],
+                    'stars_formatted': format_metric_number(repo_d['stars']),
+                    'forks': repo_d['forks'],
+                    'forks_formatted': format_metric_number(repo_d['forks']),
+                    'open_issues': repo_d['open_issues'],
+                    'open_issues_formatted': format_metric_number(repo_d['open_issues']),
+                    'health_score': health_d['total_score'],
+                    'health_tier': health_d['health_tier'],
+                    'activity_score': health_d['scores']['activity'],
+                    'issue_score': health_d['scores']['issue_management'],
+                    'pr_score': health_d['scores']['pr_activity'],
+                    'contributor_score': health_d['scores']['contributor_diversity'],
+                    'maintenance_score': health_d['scores']['maintenance'],
+                    'primary_language': repo_d.get('language') or 'Not specified',
+                    'license': repo_d.get('license') or 'Not specified',
+                    'commits_count': c_stats.get('total_analyzed', 0),
+                    'issues_count': iss_stats.get('total_analyzed', 0),
+                    'prs_count': pr_stats.get('total_analyzed', 0),
+                    'contributors_count': contrib_stats.get('total_recorded', 0),
+                    'commits_per_active_day': c_stats.get('commits_per_active_day', 0.0),
+                    'commits_per_calendar_day': c_stats.get('commits_per_calendar_day', 0.0),
+                    'issue_resolution_rate': iss_stats.get('resolution_rate', 0.0),
+                    'pr_merge_rate': pr_stats.get('merge_rate', 0.0),
+                    'hhi': contrib_stats.get('hhi', 'N/A'),
+                    'analysis_window': window,
+                    'window_label': cov_d.get('window_label', 'Last 90 Days'),
+                    'data_coverage': cov_d,
+                })
             except Exception as e:
-                logger.warning(f"Could not load repository '{raw}' for comparison: {e}")
+                logger.warning(f"Could not load full repository analysis for comparison on '{raw}': {e}")
 
         if len(parsed_repos) < 2:
             return None
 
         comparison_results = AnalyticsEngine.compare_repositories(parsed_repos)
-        comparison_chart_json = json.dumps({
+        chart_payload = {
             'labels': comparison_results['chart_labels'],
             'stars': comparison_results['stars_data'],
             'forks': comparison_results['forks_data'],
             'health': comparison_results['health_data'],
-        })
+        }
+        comparison_chart_json = json.dumps(chart_payload)
 
         return {
             'comparison': comparison_results,
             'chart_json': comparison_chart_json,
+            'comparison_chart_data': chart_payload,
             'repositories': parsed_repos,
+            'window': window,
+            'analysis_window': window,
         }
+

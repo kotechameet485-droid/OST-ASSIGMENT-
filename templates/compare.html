@@ -18,17 +18,26 @@
         <div class="card border shadow-xs p-4 mb-5">
             <form method="GET" action="{% url 'compare' %}">
                 <div class="row g-3 align-items-end">
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label for="compareRepo1" class="form-label small fw-semibold text-secondary">Repository 1 <span class="text-danger">*</span></label>
                         {{ form.repo1 }}
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label for="compareRepo2" class="form-label small fw-semibold text-secondary">Repository 2 <span class="text-danger">*</span></label>
                         {{ form.repo2 }}
                     </div>
                     <div class="col-md-3">
                         <label for="compareRepo3" class="form-label small fw-semibold text-secondary">Repository 3 (Optional)</label>
                         {{ form.repo3 }}
+                    </div>
+                    <div class="col-md-2">
+                        <label for="compareWindow" class="form-label small fw-semibold text-secondary">Analysis Scope</label>
+                        <select name="window" id="compareWindow" class="form-select font-monospace">
+                            <option value="30d" {% if window == '30d' %}selected{% endif %}>Last 30 Days</option>
+                            <option value="90d" {% if window == '90d' or not window %}selected{% endif %}>Last 90 Days</option>
+                            <option value="180d" {% if window == '180d' %}selected{% endif %}>Last 6 Months</option>
+                            <option value="365d" {% if window == '365d' %}selected{% endif %}>Last 1 Year</option>
+                        </select>
                     </div>
                     <div class="col-md-1">
                         <button type="submit" class="btn os-btn-primary w-100">
@@ -41,13 +50,13 @@
             <!-- Quick Compare Sample Pills -->
             <div class="d-flex flex-wrap align-items-center gap-2 mt-3 pt-3 border-top">
                 <span class="text-muted extra-small fw-semibold text-uppercase tracking-wider me-1">Sample Comparisons:</span>
-                <a href="{% url 'compare' %}?repo1=facebook/react&repo2=vuejs/core" class="btn btn-sm os-btn-pill">
+                <a href="{% url 'compare' %}?repo1=facebook/react&repo2=vuejs/core&window={{ window|default:'90d' }}" class="btn btn-sm os-btn-pill">
                     react vs vue
                 </a>
-                <a href="{% url 'compare' %}?repo1=pallets/flask&repo2=django/django" class="btn btn-sm os-btn-pill">
+                <a href="{% url 'compare' %}?repo1=pallets/flask&repo2=django/django&window={{ window|default:'90d' }}" class="btn btn-sm os-btn-pill">
                     flask vs django
                 </a>
-                <a href="{% url 'compare' %}?repo1=facebook/react&repo2=vuejs/core&repo3=angular/angular" class="btn btn-sm os-btn-pill">
+                <a href="{% url 'compare' %}?repo1=facebook/react&repo2=vuejs/core&repo3=angular/angular&window={{ window|default:'90d' }}" class="btn btn-sm os-btn-pill">
                     react vs vue vs angular
                 </a>
             </div>
@@ -61,7 +70,7 @@
                         <i class="bi bi-bar-chart-fill text-primary"></i>
                         Side-by-Side Telemetry Overview
                     </h2>
-                    <span class="badge bg-light text-secondary border font-monospace">Objective Measurement</span>
+                    <span class="badge bg-light text-secondary border font-monospace">Objective Measurement — Scope: {{ window|upper }}</span>
                 </div>
                 <div class="position-relative" style="height: 280px;">
                     <canvas id="compareGroupedChart"></canvas>
@@ -75,7 +84,7 @@
                         <i class="bi bi-table text-primary"></i>
                         Comparative Metrics Matrix
                     </h2>
-                    <span class="text-muted extra-small">Factual Telemetry Only — No Subjective Ranking</span>
+                    <span class="text-muted extra-small">Factual Telemetry Only — No Subjective Ranking or Fake Scores</span>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0">
@@ -85,7 +94,7 @@
                                 {% for r in comparison.repositories %}
                                     <th class="text-center font-monospace">
                                         <div class="fw-bold text-dark">{{ r.name }}</div>
-                                        <a href="{% url 'analyze' %}?repo={{ r.name }}" class="extra-small text-decoration-none text-primary">
+                                        <a href="{% url 'analyze' %}?repo={{ r.name }}&window={{ r.analysis_window }}" class="extra-small text-decoration-none text-primary">
                                             View Dashboard <i class="bi bi-arrow-right"></i>
                                         </a>
                                     </th>
@@ -93,6 +102,18 @@
                             </tr>
                         </thead>
                         <tbody>
+                            <!-- Analysis Scope (Section 15 & 48) -->
+                            <tr class="table-light">
+                                <td class="fw-bold text-dark">
+                                    <i class="bi bi-calendar3 text-primary me-2"></i>Analysis Scope
+                                </td>
+                                {% for r in comparison.repositories %}
+                                    <td class="text-center">
+                                        <span class="badge bg-light text-dark border font-monospace">{{ r.window_label }}</span>
+                                    </td>
+                                {% endfor %}
+                            </tr>
+
                             <!-- Health Score -->
                             <tr class="table-light">
                                 <td class="fw-bold text-dark">
@@ -135,6 +156,58 @@
                                 </td>
                                 {% for r in comparison.repositories %}
                                     <td class="text-center font-monospace text-danger">{{ r.open_issues_formatted }}</td>
+                                {% endfor %}
+                            </tr>
+
+                            <!-- Data Coverage Row (Section 48) -->
+                            <tr>
+                                <td class="fw-semibold text-secondary">
+                                    <i class="bi bi-check-all text-primary me-2"></i>Data Coverage
+                                </td>
+                                {% for r in comparison.repositories %}
+                                    <td class="text-center extra-small font-monospace text-secondary">
+                                        {{ r.commits_count }} commits · {{ r.issues_count }} issues · {{ r.prs_count }} PRs
+                                    </td>
+                                {% endfor %}
+                            </tr>
+
+                            <!-- Commit Velocity -->
+                            <tr>
+                                <td class="fw-semibold text-secondary">
+                                    <i class="bi bi-speedometer2 text-success me-2"></i>Commits / Active Day
+                                </td>
+                                {% for r in comparison.repositories %}
+                                    <td class="text-center font-monospace">{{ r.commits_per_active_day }}</td>
+                                {% endfor %}
+                            </tr>
+
+                            <!-- Issue Resolution Rate -->
+                            <tr>
+                                <td class="fw-semibold text-secondary">
+                                    <i class="bi bi-check-circle text-primary me-2"></i>Analyzed Issue Resolution
+                                </td>
+                                {% for r in comparison.repositories %}
+                                    <td class="text-center font-monospace">{{ r.issue_resolution_rate }}%</td>
+                                {% endfor %}
+                            </tr>
+
+                            <!-- PR Merge Rate -->
+                            <tr>
+                                <td class="fw-semibold text-secondary">
+                                    <i class="bi bi-sign-merge-right text-info me-2"></i>Analyzed PR Merge Rate
+                                </td>
+                                {% for r in comparison.repositories %}
+                                    <td class="text-center font-monospace">{{ r.pr_merge_rate }}%</td>
+                                {% endfor %}
+                            </tr>
+
+                            <!-- Maintainer Concentration (HHI) -->
+                            <tr>
+                                <td class="fw-semibold text-secondary">
+                                    <i class="bi bi-pie-chart text-warning me-2"></i>Contribution Concentration (HHI)
+                                </td>
+                                {% for r in comparison.repositories %}
+                                    <td class="text-center font-monospace">{{ r.hhi }}</td>
                                 {% endfor %}
                             </tr>
 
@@ -221,7 +294,7 @@
                 <ul class="mb-0 small text-secondary ps-3">
                     {% for r in comparison.repositories %}
                     <li class="mb-1">
-                        <strong>{{ r.name }}</strong> presents {{ r.stars_formatted }} stars, {{ r.forks_formatted }} forks, and a health score of {{ r.health_score }}/100 with primary language {{ r.primary_language }}.
+                        <strong>{{ r.name }}</strong> presents {{ r.stars_formatted }} stars, {{ r.forks_formatted }} forks, and a health score of {{ r.health_score }}/100 evaluated under the {{ r.window_label }} scope.
                     </li>
                     {% endfor %}
                 </ul>
@@ -250,9 +323,16 @@
 {% endblock %}
 
 {% block extra_js %}
-{% if chart_json %}
+{% if comparison_chart_data %}
+{{ comparison_chart_data|json_script:"comp-chart-payload" }}
+{% elif chart_json %}
+<script id="comp-chart-payload" type="application/json">
+{{ chart_json|safe }}
+</script>
+{% endif %}
+{% if comparison_chart_data or chart_json %}
 <script>
-    const compData = {{ chart_json|safe }};
+    const compData = JSON.parse(document.getElementById('comp-chart-payload').textContent);
     const ctx = document.getElementById('compareGroupedChart');
     if (ctx) {
         new Chart(ctx, {

@@ -19,10 +19,16 @@
                 <span class="fw-semibold text-dark font-monospace">{{ repo.full_name }}</span>
             </div>
             <div class="d-flex flex-wrap align-items-center gap-2">
-                <!-- Refresh Analysis Button (Section 9) -->
-                <a href="{% url 'analyze' %}?repo={{ repo.full_name }}&window={{ current_window }}&refresh=true" class="btn btn-sm os-btn-secondary" title="Force fresh fetch from GitHub API">
-                    <i class="bi bi-arrow-clockwise me-1"></i> Refresh Analysis
-                </a>
+                <!-- Refresh Analysis Button with CSRF protection (Section 29) -->
+                <form method="POST" action="{% url 'analyze' %}" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="repository" value="{{ repo.full_name }}">
+                    <input type="hidden" name="window" value="{{ current_window }}">
+                    <input type="hidden" name="refresh" value="true">
+                    <button type="submit" class="btn btn-sm os-btn-secondary" title="Force fresh fetch from GitHub API with CSRF protection">
+                        <i class="bi bi-arrow-clockwise me-1"></i> Refresh Analysis
+                    </button>
+                </form>
                 <a href="{% url 'compare' %}?repo1={{ repo.full_name }}" class="btn btn-sm os-btn-secondary">
                     <i class="bi bi-intersect me-1"></i> Compare Repository
                 </a>
@@ -38,7 +44,7 @@
         <!-- LEVEL 1: REPOSITORY HEADER CARD (Section 30 & 31) -->
         <div class="card os-repo-header-card border shadow-sm p-4 mb-4">
             <div class="row align-items-center gy-3">
-                <div class="col-lg-8">
+                <div class="col-lg-7">
                     <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                         <span class="os-repo-icon-wrapper">
                             <i class="bi bi-journal-code text-primary fs-4"></i>
@@ -70,7 +76,7 @@
                         <span>·</span>
                         <span><i class="bi bi-git me-1 text-primary"></i>Branch: <strong>{{ repo.default_branch }}</strong></span>
                         <span>·</span>
-                        <span><i class="bi bi-code-slash me-1 text-primary"></i>Primary: <strong>{{ repo.language|default:language_dist.primary_language }}</strong></span>
+                        <span><i class="bi bi-code-slash me-1 text-primary"></i>Primary: <strong>{{ repo.language|default:"Not specified" }}</strong></span>
                         <span>·</span>
                         <span><i class="bi bi-calendar-event me-1 text-primary"></i>Created: <strong>{{ repo.created_at|slice:":10" }}</strong></span>
                         <span>·</span>
@@ -78,24 +84,55 @@
                     </div>
                 </div>
 
-                <!-- Health Score Hero Summary -->
-                <div class="col-lg-4 text-lg-end">
-                    <div class="d-inline-block text-start border rounded-3 p-3 bg-white shadow-xs" style="min-width: 230px;">
-                        <div class="d-flex align-items-center justify-content-between gap-3 mb-1">
-                            <span class="text-muted extra-small fw-semibold text-uppercase tracking-wider">Health Score</span>
-                            <span class="badge bg-{{ health.tier_badge }}-subtle text-{{ health.tier_badge }} border border-{{ health.tier_badge }}-subtle">
-                                {{ health.health_tier }}
-                            </span>
+                <!-- Health Score Hero Summary & Prominent Analysis Coverage Card (Section 12 & 45) -->
+                <div class="col-lg-5">
+                    <div class="row g-2">
+                        <div class="col-sm-6">
+                            <div class="border rounded-3 p-3 bg-white shadow-xs h-100">
+                                <div class="d-flex align-items-center justify-content-between mb-1">
+                                    <span class="text-muted extra-small fw-semibold text-uppercase tracking-wider">Health Score</span>
+                                    <span class="badge bg-{{ health.tier_badge }}-subtle text-{{ health.tier_badge }} border border-{{ health.tier_badge }}-subtle">
+                                        {{ health.health_tier }}
+                                    </span>
+                                </div>
+                                <div class="d-flex align-items-baseline gap-2">
+                                    <span class="display-6 fw-bold text-dark font-monospace">{{ health.total_score }}</span>
+                                    <span class="text-muted fs-6">/ 100</span>
+                                </div>
+                                <div class="progress mt-2" style="height: 6px;">
+                                    <div class="progress-bar bg-{{ health.tier_badge }}" role="progressbar" style="width: {{ health.total_score }}%;" aria-valuenow="{{ health.total_score }}" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                                <div class="text-muted extra-small mt-2">
+                                    5-Pillar Maintainability
+                                </div>
+                            </div>
                         </div>
-                        <div class="d-flex align-items-baseline gap-2">
-                            <span class="display-5 fw-bold text-dark font-monospace">{{ health.total_score }}</span>
-                            <span class="text-muted fs-6">/ 100</span>
-                        </div>
-                        <div class="progress mt-2" style="height: 6px;">
-                            <div class="progress-bar bg-{{ health.tier_badge }}" role="progressbar" style="width: {{ health.total_score }}%;" aria-valuenow="{{ health.total_score }}" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                        <div class="text-muted extra-small mt-2">
-                            Analytical Health Index
+                        <div class="col-sm-6">
+                            <!-- Prominent Coverage Card -->
+                            <div class="border rounded-3 p-3 bg-white shadow-xs h-100">
+                                <div class="d-flex align-items-center justify-content-between mb-1">
+                                    <span class="text-primary extra-small fw-bold text-uppercase tracking-wider">Analysis Coverage</span>
+                                    <span class="badge bg-light text-dark border font-monospace extra-small">{{ coverage.window_label }}</span>
+                                </div>
+                                <div class="extra-small font-monospace text-secondary mt-1">
+                                    <div class="d-flex justify-content-between py-1 border-bottom">
+                                        <span>Commits:</span>
+                                        <strong class="text-dark">{{ coverage.commits_analyzed }} analyzed</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between py-1 border-bottom">
+                                        <span>Issues:</span>
+                                        <strong class="text-dark">{{ coverage.issues_analyzed }} analyzed</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between py-1 border-bottom">
+                                        <span>Pull Requests:</span>
+                                        <strong class="text-dark">{{ coverage.prs_analyzed }} analyzed</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between py-1">
+                                        <span>Contributors:</span>
+                                        <strong class="text-dark">{{ coverage.contributors_recorded }} analyzed</strong>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -308,21 +345,30 @@
                 </div>
             </div>
 
-            <!-- Commit Summary Stat Badges -->
+            <!-- Commit Summary Stat Badges (Section 18: Active Day vs Calendar Day) -->
             <div class="row g-3 mb-3">
-                <div class="col-sm-4">
+                <div class="col-sm-3">
                     <div class="p-2 border rounded-2 bg-light text-center">
-                        <div class="text-muted extra-small">Avg Commits / Day</div>
-                        <div class="h5 fw-bold text-dark mb-0 font-monospace">{{ commit_stats.commits_per_day_avg }}</div>
+                        <div class="text-muted extra-small">Commits / Active Day</div>
+                        <div class="h5 fw-bold text-dark mb-0 font-monospace">{{ commit_stats.commits_per_active_day }}</div>
+                        <div class="text-muted extra-small">Across {{ commit_stats.active_days_count }} active days</div>
                     </div>
                 </div>
-                <div class="col-sm-4">
+                <div class="col-sm-3">
+                    <div class="p-2 border rounded-2 bg-light text-center">
+                        <div class="text-muted extra-small">Commits / Calendar Day</div>
+                        <div class="h5 fw-bold text-dark mb-0 font-monospace">{{ commit_stats.commits_per_calendar_day }}</div>
+                        <div class="text-muted extra-small">Across {{ commit_stats.calendar_days_count }} days scope</div>
+                    </div>
+                </div>
+                <div class="col-sm-3">
                     <div class="p-2 border rounded-2 bg-light text-center">
                         <div class="text-muted extra-small">Max Single-Day Commits</div>
                         <div class="h5 fw-bold text-dark mb-0 font-monospace">{{ commit_stats.max_commits_day }}</div>
+                        <div class="text-muted extra-small">Peak daily output</div>
                     </div>
                 </div>
-                <div class="col-sm-4">
+                <div class="col-sm-3">
                     <div class="p-2 border rounded-2 bg-light text-center">
                         <div class="text-muted extra-small">Days Since Latest Commit</div>
                         <div class="h5 fw-bold text-dark mb-0 font-monospace">
@@ -332,6 +378,7 @@
                                 N/A
                             {% endif %}
                         </div>
+                        <div class="text-muted extra-small">Days elapsed since push</div>
                     </div>
                 </div>
             </div>
@@ -470,7 +517,7 @@
                         <i class="bi bi-people text-primary"></i>
                         Contributor Community & Distribution Concentration
                     </h2>
-                    <p class="text-secondary small mb-0">Community depth and maintainer dependency analysis</p>
+                    <p class="text-secondary small mb-0">Contribution Concentration: Based on analyzed contributors returned by GitHub API.</p>
                 </div>
                 <div class="d-flex flex-wrap align-items-center gap-2">
                     <span class="badge bg-light text-secondary border font-monospace">
@@ -642,13 +689,19 @@
 {% endblock %}
 
 {% block extra_js %}
+{{ chart_payloads.commit_trend|json_script:"commit-trend-payload" }}
+{{ chart_payloads.issues_trend|json_script:"issues-trend-payload" }}
+{{ chart_payloads.prs_status|json_script:"prs-status-payload" }}
+{{ chart_payloads.languages|json_script:"languages-payload" }}
+{{ chart_payloads.health_trend|json_script:"health-trend-payload" }}
+
 <script>
-    // Ingest JSON payloads passed from Django AnalyticsEngine
-    const commitTrendPayload = {{ chart_payloads.commit_trend|safe }};
-    const issuesTrendPayload = {{ chart_payloads.issues_trend|safe }};
-    const prsStatusPayload = {{ chart_payloads.prs_status|safe }};
-    const languagesPayload = {{ chart_payloads.languages|safe }};
-    const healthTrendPayload = {{ chart_payloads.health_trend|safe }};
+    // Ingest JSON payloads securely via Django json_script (Section 30)
+    const commitTrendPayload = JSON.parse(document.getElementById('commit-trend-payload').textContent);
+    const issuesTrendPayload = JSON.parse(document.getElementById('issues-trend-payload').textContent);
+    const prsStatusPayload = JSON.parse(document.getElementById('prs-status-payload').textContent);
+    const languagesPayload = JSON.parse(document.getElementById('languages-payload').textContent);
+    const healthTrendPayload = JSON.parse(document.getElementById('health-trend-payload').textContent);
 
     // Global Chart.js styling defaults for developer-focused aesthetic
     Chart.defaults.font.family = "'Inter', -apple-system, sans-serif";

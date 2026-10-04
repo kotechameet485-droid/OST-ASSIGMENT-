@@ -162,16 +162,28 @@ class AnalyticsEngine:
     def calculate_commit_statistics(
         cls,
         commits: List[Dict[str, Any]],
-        analysis_window: str = '90d'
+        analysis_window: str = '90d',
+        window_days: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Calculates commit frequency, averages, days since latest commit,
         and time-series datasets across 30d, 90d, 6m, and 1y for Chart.js.
         Handles empty datasets, single records, missing timestamps, and duplicates safely.
+        Supports window_days parameter directly for explicit calendar day spans.
         """
+        window_days_map = {'30d': 30, '90d': 90, '180d': 180, '365d': 365}
+        if window_days is not None:
+            calendar_days = int(window_days)
+        else:
+            calendar_days = window_days_map.get(str(analysis_window).lower(), 90)
+
         empty_res = {
             'total_analyzed': 0,
             'commits_per_day_avg': 0.0,
+            'commits_per_active_day': 0.0,
+            'commits_per_calendar_day': 0.0,
+            'active_days_count': 0,
+            'calendar_days_count': calendar_days,
             'max_commits_day': 0,
             'min_commits_day': 0,
             'days_since_latest': None,
@@ -223,7 +235,9 @@ class AnalyticsEngine:
         df['month'] = naive_dt.dt.to_period('M').apply(lambda r: str(r))
 
         daily_counts = df.groupby('day').size()
-        avg_per_day = round(float(daily_counts.mean()), 1) if not daily_counts.empty else 0.0
+        avg_per_active_day = round(float(daily_counts.mean()), 1) if not daily_counts.empty else 0.0
+        avg_per_calendar_day = round(float(len(df)) / max(1, calendar_days), 1)
+        active_days_count = len(daily_counts)
         max_per_day = int(daily_counts.max()) if not daily_counts.empty else 0
         min_per_day = int(daily_counts.min()) if not daily_counts.empty else 0
 
@@ -276,7 +290,11 @@ class AnalyticsEngine:
 
         return {
             'total_analyzed': len(df),
-            'commits_per_day_avg': avg_per_day,
+            'commits_per_day_avg': avg_per_active_day,
+            'commits_per_active_day': avg_per_active_day,
+            'commits_per_calendar_day': avg_per_calendar_day,
+            'active_days_count': active_days_count,
+            'calendar_days_count': calendar_days,
             'max_commits_day': max_per_day,
             'min_commits_day': min_per_day,
             'days_since_latest': days_since_latest,
@@ -532,11 +550,11 @@ class AnalyticsEngine:
             shares = (df['contributions'] / total_contributions) * 100.0
             hhi = round(float((shares ** 2).sum()), 1)
 
-        # Categorize HHI concentration neutrally (Do not label as 'bad project')
+        # Categorize HHI concentration neutrally (Based on analyzed contributors returned by GitHub)
         if hhi >= 2500:
             concentration_label = "High maintainer concentration"
         elif hhi >= 1500:
-            concentration_label = "Moderate concentration"
+            concentration_label = "Moderate maintainer concentration"
         else:
             concentration_label = "Well-distributed maintainer base"
 
@@ -568,6 +586,7 @@ class AnalyticsEngine:
             'top10_share': top10_share,
             'hhi': hhi,
             'concentration_label': concentration_label,
+            'methodology_note': 'Based on analyzed contributors returned by GitHub API.',
             'leaderboard': leaderboard,
             'chart_labels': chart_labels,
             'chart_data': chart_data,
@@ -607,8 +626,11 @@ class AnalyticsEngine:
 
         # ---------------------------------------------------------------------
         # 1. Activity (25% Weight)
-        # Signals: Commit recency (days since push), commit frequency (avg commits/day),
-        # consistency over sample window.
+        # Multi-signal evaluation (Total: 0-100 normalized):
+        #   - Recency (40 pts): Days since latest commit / push
+        #   - Frequency (30 pts): Commit velocity across the analysis window
+        #   - Consistency (15 pts): Distribution of active commit days
+        #   - Trend (15 pts): Volume in recent 30-day window vs prior periods
         # ---------------------------------------------------------------------
         days_since_commit = None
         if commit_stats and commit_stats.get('days_since_latest') is not None:
@@ -622,44 +644,115 @@ class AnalyticsEngine:
                 except Exception:
                     days_since_commit = 30
 
-        # Base score from recency
+        # Signal 1: Recency (Max 40 pts)
         if days_since_commit is None:
-            activity_score = 65
-            pillar_breakdowns['activity'].append("Recency: Estimated from repository push timestamp.")
+            recency_pts = 26
+            pillar_breakdowns['activity'].append("Recency (26/40 pts): Estimated from repository metadata.")
         elif days_since_commit <= 3:
-            activity_score = 96
-            pillar_breakdowns['activity'].append(f"Commit recency: Pushed {days_since_commit}d ago (active development).")
-            rationale.append("High commit frequency: Code pushed within the last 3 days.")
+            recency_pts = 40
+            pillar_breakdowns['activity'].append(f"Recency (40/40 pts): Pushed {days_since_commit}d ago (active development).")
+            rationale.append("Active commits within the last 3 days.")
         elif days_since_commit <= 14:
-            activity_score = 88
-            pillar_breakdowns['activity'].append(f"Commit recency: Pushed {days_since_commit}d ago (consistent cadence).")
+            recency_pts = 34
+            pillar_breakdowns['activity'].append(f"Recency (34/40 pts): Pushed {days_since_commit}d ago (regular cadence).")
             rationale.append("Active commits in the last two weeks.")
         elif days_since_commit <= 45:
-            activity_score = 75
-            pillar_breakdowns['activity'].append(f"Commit recency: Pushed {days_since_commit}d ago (steady activity).")
-            rationale.append("Steady activity within the last 45 days.")
+            recency_pts = 26
+            pillar_breakdowns['activity'].append(f"Recency (26/40 pts): Pushed {days_since_commit}d ago (steady activity).")
         elif days_since_commit <= 180:
-            activity_score = 55
-            pillar_breakdowns['activity'].append(f"Commit recency: Pushed {days_since_commit}d ago (moderate inactivity).")
-            rationale.append("Moderate inactivity: No pushes in several months.")
+            recency_pts = 16
+            pillar_breakdowns['activity'].append(f"Recency (16/40 pts): Pushed {days_since_commit}d ago (inactivity).")
+            rationale.append("Inactivity: Over 45 days since latest commit.")
         else:
-            activity_score = 30
-            pillar_breakdowns['activity'].append(f"Commit recency: Stagnant ({days_since_commit}d since latest commit).")
+            recency_pts = 6
+            pillar_breakdowns['activity'].append(f"Recency (6/40 pts): Stagnant ({days_since_commit}d since latest commit).")
             rationale.append("Stagnant codebase: Over 6 months since latest commit.")
 
-        # Cadence adjustment based on average commits per day
+        # Signal 2: Frequency (Max 30 pts)
         if commit_stats:
-            c_avg = commit_stats.get('commits_per_day_avg', 0.0)
-            if c_avg >= 3.0:
-                activity_score = min(100, activity_score + 4)
-                pillar_breakdowns['activity'].append(f"Frequency: {c_avg} commits/day (very high velocity).")
-            elif c_avg >= 1.0:
-                activity_score = min(100, activity_score + 2)
-                pillar_breakdowns['activity'].append(f"Frequency: {c_avg} commits/day (steady cadence).")
-            elif c_avg < 0.1 and commit_stats.get('total_analyzed', 0) > 0:
-                activity_score = max(20, activity_score - 5)
-                pillar_breakdowns['activity'].append(f"Frequency: Sparse commit volume ({c_avg} commits/day).")
+            c_cal_avg = commit_stats.get('commits_per_calendar_day', 0.0)
+            c_act_avg = commit_stats.get('commits_per_active_day', commit_stats.get('commits_per_day_avg', 0.0))
+            total_commits = commit_stats.get('total_analyzed', 0)
 
+            if total_commits >= 50 or c_cal_avg >= 1.0 or c_act_avg >= 3.0:
+                freq_pts = 30
+                pillar_breakdowns['activity'].append(f"Frequency (30/30 pts): High commit velocity ({c_act_avg}/active day, {c_cal_avg}/cal day).")
+            elif total_commits >= 20 or c_cal_avg >= 0.3 or c_act_avg >= 1.5:
+                freq_pts = 24
+                pillar_breakdowns['activity'].append(f"Frequency (24/30 pts): Steady commit cadence ({c_act_avg}/active day).")
+            elif total_commits >= 5 or c_cal_avg >= 0.1:
+                freq_pts = 16
+                pillar_breakdowns['activity'].append(f"Frequency (16/30 pts): Moderate commit volume ({total_commits} analyzed).")
+            elif total_commits > 0:
+                freq_pts = 10
+                pillar_breakdowns['activity'].append(f"Frequency (10/30 pts): Low commit volume ({total_commits} analyzed).")
+            else:
+                freq_pts = 5
+                pillar_breakdowns['activity'].append("Frequency (5/30 pts): Minimal or zero commits in window.")
+        else:
+            if days_since_commit is not None and days_since_commit <= 3:
+                freq_pts = 25
+            elif days_since_commit is not None and days_since_commit <= 14:
+                freq_pts = 20
+            elif days_since_commit is not None and days_since_commit <= 45:
+                freq_pts = 14
+            else:
+                freq_pts = 5
+            pillar_breakdowns['activity'].append(f"Frequency ({freq_pts}/30 pts): Estimated from repository activity cadence.")
+
+        # Signal 3: Consistency (Max 15 pts) - Active commit days spread
+        if commit_stats:
+            active_days = commit_stats.get('active_days_count', 0)
+            if active_days >= 15:
+                cons_pts = 15
+                pillar_breakdowns['activity'].append(f"Consistency (15/15 pts): Commits distributed across {active_days} active days.")
+            elif active_days >= 7:
+                cons_pts = 12
+                pillar_breakdowns['activity'].append(f"Consistency (12/15 pts): Commits distributed across {active_days} active days.")
+            elif active_days >= 3:
+                cons_pts = 8
+                pillar_breakdowns['activity'].append(f"Consistency (8/15 pts): Commits across {active_days} active days.")
+            elif active_days >= 1:
+                cons_pts = 4
+                pillar_breakdowns['activity'].append(f"Consistency (4/15 pts): Commits concentrated on {active_days} day(s).")
+            else:
+                cons_pts = 2
+                pillar_breakdowns['activity'].append("Consistency (2/15 pts): Insufficient active day spread.")
+        else:
+            if days_since_commit is not None and days_since_commit <= 7:
+                cons_pts = 12
+            elif days_since_commit is not None and days_since_commit <= 30:
+                cons_pts = 8
+            else:
+                cons_pts = 3
+            pillar_breakdowns['activity'].append(f"Consistency ({cons_pts}/15 pts): Estimated from repository update cadence.")
+
+        # Signal 4: Recent Trend (Max 15 pts) - 30-day activity presence
+        if commit_stats:
+            trend_30d_data = commit_stats.get('trend_data_30d', [])
+            recent_30d_sum = sum(trend_30d_data) if trend_30d_data else 0
+            if recent_30d_sum >= 10:
+                trend_pts = 15
+                pillar_breakdowns['activity'].append(f"Trend (15/15 pts): Strong 30-day commit volume ({recent_30d_sum} commits).")
+            elif recent_30d_sum >= 3:
+                trend_pts = 11
+                pillar_breakdowns['activity'].append(f"Trend (11/15 pts): Moderate recent commit volume ({recent_30d_sum} commits).")
+            elif recent_30d_sum >= 1:
+                trend_pts = 7
+                pillar_breakdowns['activity'].append(f"Trend (7/15 pts): Low recent commit volume ({recent_30d_sum} commits).")
+            else:
+                trend_pts = 3
+                pillar_breakdowns['activity'].append("Trend (3/15 pts): No commits recorded in latest 30 days.")
+        else:
+            if days_since_commit is not None and days_since_commit <= 7:
+                trend_pts = 12
+            elif days_since_commit is not None and days_since_commit <= 30:
+                trend_pts = 8
+            else:
+                trend_pts = 3
+            pillar_breakdowns['activity'].append(f"Trend ({trend_pts}/15 pts): Estimated from recent repository push.")
+
+        activity_score = recency_pts + freq_pts + cons_pts + trend_pts
         scores['activity'] = int(min(100, max(0, round(activity_score))))
 
         # ---------------------------------------------------------------------
@@ -811,38 +904,62 @@ class AnalyticsEngine:
 
         # ---------------------------------------------------------------------
         # 5. Maintenance & Hygiene (20% Weight)
-        # Signals: Valid license, project description, archived status, topics/documentation.
+        # Directly normalized to 0-100 based on standard GitHub metadata fields:
+        #   - Open-Source License: 30 pts (Documented open-source license)
+        #   - Repository Status: 25 pts (Active/unarchived: 25 pts; Archived: 0 pts)
+        #   - Project Description: 20 pts (Clear scope & purpose documented)
+        #   - Discoverability / Topics: 15 pts (>=2 topics: 15 pts; 1 topic: 8 pts; 0: 0 pts)
+        #   - Default Branch Hygiene: 10 pts ('main' or 'master': 10 pts; custom: 5 pts)
+        # Total Maximum = 30 + 25 + 20 + 15 + 10 = 100 points.
         # ---------------------------------------------------------------------
-        maintenance_score = 45
-        has_license = bool(repo_data.get('license') and repo_data.get('license') != 'Not specified')
-        has_desc = bool(repo_data.get('description'))
+        maintenance_score = 0
+        has_license = bool(repo_data.get('license') and repo_data.get('license') not in ('Not specified', 'NOASSERTION', None))
+        has_desc = bool(repo_data.get('description') and str(repo_data.get('description')).strip())
+        is_archived = bool(repo_data.get('is_archived', False))
         topics = repo_data.get('topics') or []
+        default_branch = repo_data.get('default_branch', 'main')
 
+        # 1. License (30 pts)
         if has_license:
-            maintenance_score += 25
-            pillar_breakdowns['maintenance'].append(f"License: Documented license ({repo_data.get('license')}).")
-            rationale.append(f"Documented open-source license: {repo_data.get('license')}.")
+            maintenance_score += 30
+            pillar_breakdowns['maintenance'].append(f"License (30/30 pts): Documented open-source license ({repo_data.get('license')}).")
         else:
-            pillar_breakdowns['maintenance'].append("License: No official open-source license detected.")
+            pillar_breakdowns['maintenance'].append("License (0/30 pts): No official open-source license detected.")
             rationale.append("No official open-source license detected.")
 
+        # 2. Repository Status (25 pts)
+        if not is_archived:
+            maintenance_score += 25
+            pillar_breakdowns['maintenance'].append("Repository Status (25/25 pts): Repository is active and maintainable.")
+        else:
+            pillar_breakdowns['maintenance'].append("Repository Status (0/25 pts): Repository is archived (read-only).")
+            rationale.append("Repository is archived (read-only).")
+
+        # 3. Project Description (20 pts)
         if has_desc:
             maintenance_score += 20
-            pillar_breakdowns['maintenance'].append("Metadata: Project description provided.")
+            pillar_breakdowns['maintenance'].append("Description (20/20 pts): Project purpose clearly documented.")
         else:
-            pillar_breakdowns['maintenance'].append("Metadata: Missing descriptive metadata.")
+            pillar_breakdowns['maintenance'].append("Description (0/20 pts): Missing descriptive metadata.")
             rationale.append("Missing descriptive metadata for project purpose.")
 
-        if topics and len(topics) >= 2:
+        # 4. Discoverability / Topics (15 pts)
+        if len(topics) >= 2:
+            maintenance_score += 15
+            pillar_breakdowns['maintenance'].append(f"Topics (15/15 pts): {len(topics)} topic tags defined.")
+        elif len(topics) == 1:
+            maintenance_score += 8
+            pillar_breakdowns['maintenance'].append("Topics (8/15 pts): 1 topic tag defined.")
+        else:
+            pillar_breakdowns['maintenance'].append("Topics (0/15 pts): No discoverability topic tags defined.")
+
+        # 5. Default Branch Hygiene (10 pts)
+        if default_branch in ('main', 'master'):
             maintenance_score += 10
-            pillar_breakdowns['maintenance'].append(f"Discoverability: {len(topics)} topic tags defined.")
-
-        if repo_data.get('default_branch') in ('main', 'master'):
+            pillar_breakdowns['maintenance'].append(f"Branch Hygiene (10/10 pts): Standard default branch '{default_branch}'.")
+        else:
             maintenance_score += 5
-
-        if repo_data.get('is_archived'):
-            maintenance_score = max(20, maintenance_score - 40)
-            pillar_breakdowns['maintenance'].append("Status: Penalized due to archived read-only state.")
+            pillar_breakdowns['maintenance'].append(f"Branch Hygiene (5/10 pts): Custom default branch '{default_branch}'.")
 
         scores['maintenance'] = int(min(100, max(0, round(maintenance_score))))
 

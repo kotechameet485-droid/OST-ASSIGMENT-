@@ -6,6 +6,7 @@ validation, rate-limiting support, timeouts, and pagination.
 
 import re
 import json
+import time
 import logging
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
@@ -166,6 +167,46 @@ class GitHubService:
             "Please try again later."
         )
 
+    def _request_with_retry(
+        self,
+        url: str,
+        params: Optional[Dict[str, Any]] = None,
+        max_retries: int = 2
+    ) -> requests.Response:
+        """
+        Executes a GET request with limited retry/backoff for transient 5xx errors or connection timeouts.
+        Never retries 4xx client errors (401, 403, 404, 422, rate-limits).
+        """
+        last_exception = None
+        for attempt in range(max_retries + 1):
+            try:
+                response = self.session.get(url, params=params, timeout=self.timeout)
+                # If transient 5xx server error and retries remain, wait and retry
+                if response.status_code in (500, 502, 503, 504) and attempt < max_retries:
+                    logger.warning(f"Transient HTTP {response.status_code} from {url}, retrying attempt {attempt + 1}...")
+                    time.sleep(0.4 * (attempt + 1))
+                    continue
+                return response
+            except requests.exceptions.Timeout as e:
+                last_exception = e
+                if attempt < max_retries:
+                    logger.warning(f"Timeout on {url}, retrying attempt {attempt + 1}...")
+                    time.sleep(0.4 * (attempt + 1))
+                    continue
+                raise GitHubTimeoutError("GitHub request timed out. Please try again.")
+            except requests.exceptions.RequestException as e:
+                last_exception = e
+                if attempt < max_retries:
+                    logger.warning(f"Connection failure on {url}, retrying attempt {attempt + 1}...")
+                    time.sleep(0.4 * (attempt + 1))
+                    continue
+                raise GitHubAPIError(
+                    "We couldn't retrieve repository data right now due to a network connection failure. "
+                    "Please verify your internet connection and try again."
+                )
+        if last_exception:
+            raise last_exception
+
     def _paginate(
         self,
         endpoint: str,
@@ -190,7 +231,7 @@ class GitHubService:
 
             url = f"{self.base_url}/{endpoint.lstrip('/')}"
             try:
-                response = self.session.get(url, params=query_params, timeout=self.timeout)
+                response = self._request_with_retry(url, params=query_params)
                 if response.status_code != 200:
                     # If first page fails with error, trigger error handler
                     if page == 1:
@@ -208,17 +249,9 @@ class GitHubService:
                     break
 
                 page += 1
-            except requests.exceptions.Timeout:
-                logger.warning(f"Timeout requesting page {page} for {endpoint}")
+            except (GitHubTimeoutError, GitHubAPIError):
                 if page == 1:
-                    raise GitHubTimeoutError("GitHub request timed out. Please try again.")
-                break
-            except requests.exceptions.RequestException as e:
-                logger.warning(f"Request failure on page {page} for {endpoint}: {e}")
-                if page == 1:
-                    raise GitHubAPIError(
-                        "We couldn't retrieve repository data due to a network connection failure."
-                    )
+                    raise
                 break
 
         return results[:limit]
@@ -229,53 +262,43 @@ class GitHubService:
         """
         repo_str = f"{owner}/{repo}"
         url = f"{self.base_url}/repos/{owner}/{repo}"
-        try:
-            response = self.session.get(url, timeout=self.timeout)
-            data = self._handle_response(response, repo_str)
+        response = self._request_with_retry(url)
+        data = self._handle_response(response, repo_str)
 
-            license_name = None
-            license_spdx = None
-            if data.get('license') and isinstance(data['license'], dict):
-                license_name = data['license'].get('name')
-                license_spdx = data['license'].get('spdx_id')
+        license_name = None
+        license_spdx = None
+        if data.get('license') and isinstance(data['license'], dict):
+            license_name = data['license'].get('name')
+            license_spdx = data['license'].get('spdx_id')
 
-            return {
-                'id': data.get('id'),
-                'owner': owner,
-                'name': repo,
-                'full_name': data.get('full_name', repo_str),
-                'description': data.get('description') or '',
-                'url': data.get('html_url', f"https://github.com/{repo_str}"),
-                'stars': data.get('stargazers_count', 0),
-                'forks': data.get('forks_count', 0),
-                'watchers': data.get('watchers_count', 0),
-                'open_issues': data.get('open_issues_count', 0),
-                'created_at': data.get('created_at'),
-                'updated_at': data.get('updated_at'),
-                'pushed_at': data.get('pushed_at'),
-                'default_branch': data.get('default_branch', 'main'),
-                'license': license_name or 'Not specified',
-                'license_spdx': license_spdx or 'NOASSERTION',
-                'language': data.get('language') or 'Not specified',
-                'size': data.get('size', 0),
-                'topics': data.get('topics', []) if isinstance(data.get('topics'), list) else [],
-                'subscribers_count': data.get('subscribers_count', 0),
-                'network_count': data.get('network_count', 0),
-                'is_archived': data.get('archived', False),
-                'is_fork': data.get('fork', False),
-                'has_issues': data.get('has_issues', True),
-                'has_wiki': data.get('has_wiki', False),
-                'has_pages': data.get('has_pages', False),
-            }
-        except requests.exceptions.Timeout:
-            logger.error(f"Timeout requesting {url}")
-            raise GitHubTimeoutError("GitHub request timed out. Please try again.")
-        except requests.exceptions.RequestException as e:
-            logger.exception(f"Connection error requesting {url}: {e}")
-            raise GitHubAPIError(
-                "We couldn't retrieve repository data right now due to a network connection failure. "
-                "Please verify your internet connection and try again."
-            )
+        return {
+            'id': data.get('id'),
+            'owner': owner,
+            'name': repo,
+            'full_name': data.get('full_name', repo_str),
+            'description': data.get('description') or '',
+            'url': data.get('html_url', f"https://github.com/{repo_str}"),
+            'stars': data.get('stargazers_count', 0),
+            'forks': data.get('forks_count', 0),
+            'watchers': data.get('watchers_count', 0),
+            'open_issues': data.get('open_issues_count', 0),
+            'created_at': data.get('created_at'),
+            'updated_at': data.get('updated_at'),
+            'pushed_at': data.get('pushed_at'),
+            'default_branch': data.get('default_branch', 'main'),
+            'license': license_name or 'Not specified',
+            'license_spdx': license_spdx or 'NOASSERTION',
+            'language': data.get('language') or 'Not specified',
+            'size': data.get('size', 0),
+            'topics': data.get('topics', []) if isinstance(data.get('topics'), list) else [],
+            'subscribers_count': data.get('subscribers_count', 0),
+            'network_count': data.get('network_count', 0),
+            'is_archived': data.get('archived', False),
+            'is_fork': data.get('fork', False),
+            'has_issues': data.get('has_issues', True),
+            'has_wiki': data.get('has_wiki', False),
+            'has_pages': data.get('has_pages', False),
+        }
 
     def get_languages(self, owner: str, repo: str) -> Dict[str, int]:
         """
@@ -283,11 +306,11 @@ class GitHubService:
         """
         url = f"{self.base_url}/repos/{owner}/{repo}/languages"
         try:
-            response = self.session.get(url, timeout=self.timeout)
+            response = self._request_with_retry(url)
             if response.status_code == 200:
                 return response.json()
             return {}
-        except requests.exceptions.RequestException as e:
+        except Exception as e:
             logger.warning(f"Failed to fetch languages for {owner}/{repo}: {e}")
             return {}
 
@@ -387,18 +410,46 @@ class GitHubService:
         self,
         owner: str,
         repo: str,
-        limit: int = 100
+        limit: int = 100,
+        since: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
         Retrieves pull requests with resolution state (open, closed, merged) across pages.
+        Supports time-window filtering via the `since` parameter (ISO 8601 string).
+        Ensures old pull requests outside the analysis window are not included.
         """
         endpoint = f"/repos/{owner}/{repo}/pulls"
-        params = {'state': 'all'}
-        raw_items = self._paginate(endpoint, params=params, limit=limit, per_page=100)
+        params: Dict[str, Any] = {'state': 'all', 'sort': 'created', 'direction': 'desc'}
+
+        since_dt = None
+        if since:
+            try:
+                cleaned = since.replace('Z', '+00:00')
+                since_dt = datetime.fromisoformat(cleaned)
+                if since_dt.tzinfo is None:
+                    since_dt = since_dt.replace(tzinfo=timezone.utc)
+            except Exception as e:
+                logger.warning(f"Could not parse since parameter '{since}' as datetime: {e}")
+
+        # Fetch with pagination, stopping if PRs fall outside the window
+        raw_items = self._paginate(endpoint, params=params, limit=limit * 2, per_page=100)
         prs = []
         for item in raw_items:
             if not isinstance(item, dict):
                 continue
+
+            created_at = item.get('created_at')
+            if since_dt and created_at:
+                try:
+                    c_dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                    if c_dt.tzinfo is None:
+                        c_dt = c_dt.replace(tzinfo=timezone.utc)
+                    if c_dt < since_dt:
+                        # Since PRs are sorted by created desc, subsequent PRs are also older
+                        break
+                except Exception:
+                    pass
+
             raw_state = item.get('state', 'open')
             merged_at = item.get('merged_at')
             state = 'merged' if merged_at else raw_state
@@ -406,8 +457,11 @@ class GitHubService:
                 'pr_number': item.get('number'),
                 'title': (item.get('title') or '')[:200],
                 'state': state,
-                'created_at': item.get('created_at'),
+                'created_at': created_at,
                 'closed_at': item.get('closed_at'),
                 'merged_at': merged_at,
             })
+            if len(prs) >= limit:
+                break
         return prs
+

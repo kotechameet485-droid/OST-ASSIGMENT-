@@ -13,11 +13,37 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Load environment variables from .env file
 load_dotenv(BASE_DIR / '.env')
 
+from django.core.exceptions import ImproperlyConfigured
+
 # Security settings
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-opensourcelens-dev-key-default')
 DEBUG = os.getenv('DEBUG', 'True').lower() in ('true', '1', 'yes')
 
+if DEBUG:
+    SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-opensourcelens-dev-key-default')
+else:
+    SECRET_KEY = os.getenv('SECRET_KEY')
+    if not SECRET_KEY:
+        raise ImproperlyConfigured("The SECRET_KEY environment variable must be explicitly configured in production when DEBUG=False.")
+
 ALLOWED_HOSTS = [host.strip() for host in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if host.strip()]
+
+# Security HTTP headers and cookie flags (Section 37)
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+
+ENABLE_HTTPS_SECURITY = os.getenv('ENABLE_HTTPS_SECURITY', 'False').lower() in ('true', '1', 'yes')
+if not DEBUG and ENABLE_HTTPS_SECURITY:
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '31536000'))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+else:
+    SECURE_SSL_REDIRECT = False
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+    SECURE_HSTS_SECONDS = 0
 
 # Application definition
 INSTALLED_APPS = [

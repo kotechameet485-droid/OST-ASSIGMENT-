@@ -58,7 +58,7 @@
                 }
                 loadingOverlay.classList.remove('d-none');
 
-                orchestrateLoadingSteps();
+                initLoadingStatusCycler();
             }
         });
 
@@ -72,43 +72,27 @@
     }
 
     /**
-     * Advances multi-step pipeline animation to reflect real backend work phases.
+     * Cycles informative pipeline status messages without claiming premature completion.
      */
-    function orchestrateLoadingSteps() {
-        var steps = [
-            { id: 'step-connect', delay: 400 },
-            { id: 'step-meta', delay: 1000 },
-            { id: 'step-commits', delay: 1700 },
-            { id: 'step-issues', delay: 2400 },
-            { id: 'step-analytics', delay: 3100 },
-            { id: 'step-save', delay: 3700 }
+    function initLoadingStatusCycler() {
+        var statusEl = document.getElementById('loadingStatusText');
+        if (!statusEl) return;
+
+        var messages = [
+            'Connecting to GitHub REST API and validating endpoints...',
+            'Fetching repository metadata, languages, and activity...',
+            'Streaming paginated commits, issues, and pull requests...',
+            'Executing Pandas calculations and 5-pillar health scoring...',
+            'Synchronizing dataset and finalizing analysis snapshot...'
         ];
 
-        steps.forEach(function (s) {
-            setTimeout(function () {
-                var el = document.getElementById(s.id);
-                if (!el) return;
-
-                // Mark previous active elements complete
-                var prev = el.previousElementSibling;
-                if (prev) {
-                    prev.classList.remove('text-primary');
-                    prev.classList.add('text-success');
-                    var prevIcon = prev.querySelector('.os-step-icon');
-                    if (prevIcon) {
-                        prevIcon.innerHTML = '<i class="bi bi-check-circle-fill text-success"></i>';
-                    }
-                }
-
-                // Activate current element
-                el.classList.remove('text-muted');
-                el.classList.add('text-primary');
-                var icon = el.querySelector('.os-step-icon');
-                if (icon) {
-                    icon.innerHTML = '<i class="bi bi-arrow-repeat spin text-primary"></i>';
-                }
-            }, s.delay);
-        });
+        var index = 0;
+        setInterval(function () {
+            index = (index + 1) % messages.length;
+            if (statusEl) {
+                statusEl.textContent = messages[index];
+            }
+        }, 1800);
     }
 
     /**

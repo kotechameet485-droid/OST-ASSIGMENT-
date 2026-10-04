@@ -66,14 +66,14 @@ class AnalysisService:
         if not repo_obj or not repo_obj.fetched_at:
             return False
 
-        now = datetime.now(timezone.utc)
-        age_seconds = (now - repo_obj.fetched_at).total_seconds()
-        if age_seconds > (self.freshness_minutes * 60):
+        # Verify a snapshot exists matching the requested window
+        latest_analysis = repo_obj.analyses.filter(analysis_window=window).order_by('-analyzed_at').first()
+        if not latest_analysis or not latest_analysis.analyzed_at:
             return False
 
-        # Verify a snapshot exists matching the current window
-        latest_analysis = repo_obj.analyses.filter(analysis_window=window).first()
-        return latest_analysis is not None
+        now = datetime.now(timezone.utc)
+        age_seconds = (now - latest_analysis.analyzed_at).total_seconds()
+        return age_seconds <= (self.freshness_minutes * 60)
 
     def run_analysis(
         self,
@@ -110,7 +110,7 @@ class AnalysisService:
         contributors_raw = self.github_service.get_contributors(owner, repo_name, limit=30)
         commits_raw = self.github_service.get_commits(owner, repo_name, limit=100, since=cutoff_iso)
         issues_raw = self.github_service.get_issues(owner, repo_name, limit=100, since=cutoff_iso)
-        prs_raw = self.github_service.get_pull_requests(owner, repo_name, limit=100)
+        prs_raw = self.github_service.get_pull_requests(owner, repo_name, limit=100, since=cutoff_iso)
 
         # Step 2: Run Pandas Analytics & Health Scoring
         language_stats = AnalyticsEngine.calculate_language_statistics(languages_raw)
@@ -143,7 +143,29 @@ class AnalysisService:
             'generated_at': datetime.now(timezone.utc).isoformat(),
         }
 
-        # Step 3: Atomic Database Synchronization
+        # Step 3: Compute trend and assemble initial dashboard payload
+        past_analyses = db_repo.analyses.order_by('analyzed_at') if db_repo else RepositoryAnalysis.objects.none()
+        health_trend = AnalyticsEngine.calculate_historical_trend(past_analyses)
+
+        dashboard_payload = self._assemble_dashboard_payload(
+            repo_data=repo_data,
+            language_stats=language_stats,
+            language_dist=language_dist,
+            health_metrics=health_metrics,
+            contributors_raw=contributors_raw,
+            contributor_stats=contributor_stats,
+            commit_stats=commit_stats,
+            issue_stats=issue_stats,
+            pr_stats=pr_stats,
+            health_trend=health_trend,
+            coverage_summary=coverage_summary,
+            window=window,
+            from_cache=False,
+            issues_raw=issues_raw,
+            prs_raw=prs_raw,
+        )
+
+        # Step 4: Atomic Database Synchronization & Snapshot Storage
         repo_obj = self._synchronize_database(
             repo_data=repo_data,
             language_stats=language_stats,
@@ -158,28 +180,26 @@ class AnalysisService:
             contributor_stats=contributor_stats,
             coverage_summary=coverage_summary,
             window=window,
+            snapshot_payload=dashboard_payload,
         )
 
-        # Step 4: Extract Historical Trend
+        # Step 5: Refresh Historical Trend with the freshly saved snapshot
         past_analyses = repo_obj.analyses.order_by('analyzed_at')
-        health_trend = AnalyticsEngine.calculate_historical_trend(past_analyses)
+        fresh_health_trend = AnalyticsEngine.calculate_historical_trend(past_analyses)
+        dashboard_payload['health_trend'] = fresh_health_trend
+        if 'chart_payloads' in dashboard_payload:
+            dashboard_payload['chart_payloads']['health_trend'] = {
+                'labels': fresh_health_trend['labels'],
+                'scores': fresh_health_trend['scores'],
+                'stars': fresh_health_trend['stars'],
+                'activity_scores': fresh_health_trend.get('activity_scores', []),
+                'issue_scores': fresh_health_trend.get('issue_scores', []),
+                'pr_scores': fresh_health_trend.get('pr_scores', []),
+                'contributor_scores': fresh_health_trend.get('contributor_scores', []),
+                'maintenance_scores': fresh_health_trend.get('maintenance_scores', []),
+            }
 
-        # Step 5: Format Metrics & Chart Payloads
-        return self._assemble_dashboard_payload(
-            repo_data=repo_data,
-            language_stats=language_stats,
-            language_dist=language_dist,
-            health_metrics=health_metrics,
-            contributors_raw=contributors_raw,
-            contributor_stats=contributor_stats,
-            commit_stats=commit_stats,
-            issue_stats=issue_stats,
-            pr_stats=pr_stats,
-            health_trend=health_trend,
-            coverage_summary=coverage_summary,
-            window=window,
-            from_cache=False,
-        )
+        return dashboard_payload
 
     def _synchronize_database(
         self,
@@ -196,10 +216,12 @@ class AnalysisService:
         contributor_stats: Dict[str, Any],
         coverage_summary: Dict[str, Any],
         window: str,
+        snapshot_payload: Optional[Dict[str, Any]] = None,
     ) -> Repository:
         """
         Synchronizes all repository entities inside an isolated atomic database transaction.
-        Rolls back completely if an unexpected database error occurs.
+        Prunes stale child records belonging to the current analysis so old window data does not linger.
+        Stores an immutable snapshot_payload on the created RepositoryAnalysis record.
         """
         with transaction.atomic():
             created_dt = parse_datetime(repo_data['created_at']) if repo_data.get('created_at') else None
@@ -251,68 +273,99 @@ class AnalysisService:
             Language.objects.bulk_create(languages_to_create)
 
             # Synchronize top contributors: update existing, remove stale
-            if contributors_raw:
-                active_usernames = {c['username'] for c in contributors_raw}
-                # Remove contributors no longer returned in top set
+            if contributors_raw is not None:
+                active_usernames = {c['username'] for c in contributors_raw if c.get('username')}
                 Contributor.objects.filter(repository=repo_obj).exclude(username__in=active_usernames).delete()
                 for c in contributors_raw:
                     Contributor.objects.update_or_create(
                         repository=repo_obj,
                         username=c['username'],
                         defaults={
-                            'contributions': c['contributions'],
+                            'contributions': c.get('contributions', 0),
                             'avatar_url': c.get('avatar_url'),
                             'profile_url': c.get('profile_url'),
                         }
                     )
 
-            # Synchronize commit activities
-            if commits_raw:
+            # Synchronize commit activities: clean up stale days outside the window
+            if commits_raw is not None:
                 daily_counts = {}
                 for c in commits_raw:
                     date_str = c.get('date')
                     if date_str:
                         d = date_str[:10]
                         daily_counts[d] = daily_counts.get(d, 0) + 1
+                current_dates = set()
                 for d_str, cnt in daily_counts.items():
                     p_date = parse_date(d_str)
                     if p_date:
+                        current_dates.add(p_date)
                         CommitActivity.objects.update_or_create(
                             repository=repo_obj,
                             date=p_date,
                             defaults={'commit_count': cnt}
                         )
+                CommitActivity.objects.filter(repository=repo_obj).exclude(date__in=current_dates).delete()
 
-            # Synchronize issues
-            if issues_raw:
+            # Synchronize issues: update/create current, and remove stale issues not present in current analysis
+            if issues_raw is not None:
+                current_issue_numbers = {
+                    (iss.get('issue_number') or iss.get('number'))
+                    for iss in issues_raw
+                    if (iss.get('issue_number') or iss.get('number')) is not None
+                }
+                Issue.objects.filter(repository=repo_obj).exclude(issue_number__in=current_issue_numbers).delete()
                 for iss in issues_raw:
+                    i_num = iss.get('issue_number') or iss.get('number')
+                    if not i_num:
+                        continue
+                    c_at = iss.get('created_at')
+                    cls_at = iss.get('closed_at')
                     Issue.objects.update_or_create(
                         repository=repo_obj,
-                        issue_number=iss['issue_number'],
+                        issue_number=i_num,
                         defaults={
-                            'title': iss['title'],
-                            'state': iss['state'],
-                            'created_at': parse_datetime(iss['created_at']) or datetime.now(timezone.utc),
-                            'closed_at': parse_datetime(iss['closed_at']) if iss.get('closed_at') else None,
+                            'title': iss.get('title', ''),
+                            'state': iss.get('state', 'open'),
+                            'created_at': parse_datetime(c_at) if isinstance(c_at, str) else (c_at or datetime.now(timezone.utc)),
+                            'closed_at': parse_datetime(cls_at) if isinstance(cls_at, str) else cls_at,
                         }
                     )
 
-            # Synchronize pull requests
-            if prs_raw:
+            # Synchronize pull requests: update/create current, and remove stale PRs not in current analysis
+            if prs_raw is not None:
+                current_pr_numbers = {
+                    (pr.get('pr_number') or pr.get('number'))
+                    for pr in prs_raw
+                    if (pr.get('pr_number') or pr.get('number')) is not None
+                }
+                PullRequest.objects.filter(repository=repo_obj).exclude(pr_number__in=current_pr_numbers).delete()
                 for pr in prs_raw:
+                    p_num = pr.get('pr_number') or pr.get('number')
+                    if not p_num:
+                        continue
+                    c_at = pr.get('created_at')
+                    cls_at = pr.get('closed_at')
+                    m_at = pr.get('merged_at')
                     PullRequest.objects.update_or_create(
                         repository=repo_obj,
-                        pr_number=pr['pr_number'],
+                        pr_number=p_num,
                         defaults={
                             'title': pr.get('title', ''),
-                            'state': pr['state'],
-                            'created_at': parse_datetime(pr['created_at']) or datetime.now(timezone.utc),
-                            'closed_at': parse_datetime(pr.get('closed_at')) if pr.get('closed_at') else None,
-                            'merged_at': parse_datetime(pr.get('merged_at')) if pr.get('merged_at') else None,
+                            'state': pr.get('state', 'open'),
+                            'created_at': parse_datetime(c_at) if isinstance(c_at, str) else (c_at or datetime.now(timezone.utc)),
+                            'closed_at': parse_datetime(cls_at) if isinstance(cls_at, str) else cls_at,
+                            'merged_at': parse_datetime(m_at) if isinstance(m_at, str) else m_at,
                         }
                     )
 
             # Create immutable Historical Analysis Snapshot
+            json_safe_payload = {}
+            if snapshot_payload:
+                import json
+                from django.core.serializers.json import DjangoJSONEncoder
+                json_safe_payload = json.loads(json.dumps(snapshot_payload, cls=DjangoJSONEncoder))
+
             RepositoryAnalysis.objects.create(
                 repository=repo_obj,
                 analysis_window=window,
@@ -332,6 +385,7 @@ class AnalysisService:
                 issue_resolution_rate=issue_stats['resolution_rate'],
                 pr_merge_rate=pr_stats['merge_rate'],
                 data_coverage=coverage_summary,
+                snapshot_payload=json_safe_payload,
             )
 
         return repo_obj
@@ -344,8 +398,51 @@ class AnalysisService:
     ) -> Dict[str, Any]:
         """
         Reconstructs the dashboard analytics payload from existing database records.
+        Prioritizes the immutable snapshot_payload stored on RepositoryAnalysis for this window.
+        If a legacy record lacks snapshot_payload, filters child models strictly by the window cutoff.
         """
-        # Reconstruct repo metadata dict
+        # Step 1: Check for stored snapshot payload for this window
+        latest_analysis = repo_obj.analyses.filter(analysis_window=window).order_by('-analyzed_at').first()
+        if latest_analysis and latest_analysis.snapshot_payload:
+            payload = dict(latest_analysis.snapshot_payload)
+            payload['is_cached'] = True
+            payload['current_window'] = window
+            payload['analysis_window'] = window
+            if 'coverage' in payload and 'data_coverage' not in payload:
+                payload['data_coverage'] = payload['coverage']
+            elif 'data_coverage' in payload and 'coverage' not in payload:
+                payload['coverage'] = payload['data_coverage']
+            if 'health' in payload and isinstance(payload['health'], dict):
+                h = payload['health']
+                payload.setdefault('health_score', h.get('total_score', latest_analysis.health_score))
+                payload.setdefault('health_tier', h.get('health_tier', latest_analysis.health_tier))
+                payload.setdefault('components', h.get('components', {}))
+                payload.setdefault('pillar_breakdowns', h.get('pillar_breakdowns', {}))
+            payload['analyzed_at'] = latest_analysis.analyzed_at
+
+            # Recalculate historical trend dynamically across all snapshots
+            past_analyses = repo_obj.analyses.order_by('analyzed_at')
+            health_trend = AnalyticsEngine.calculate_historical_trend(past_analyses)
+            payload['health_trend'] = health_trend
+            if 'chart_payloads' in payload and isinstance(payload['chart_payloads'], dict):
+                chart_payloads = dict(payload['chart_payloads'])
+                chart_payloads['health_trend'] = {
+                    'labels': health_trend['labels'],
+                    'scores': health_trend['scores'],
+                    'stars': health_trend['stars'],
+                    'activity_scores': health_trend.get('activity_scores', []),
+                    'issue_scores': health_trend.get('issue_scores', []),
+                    'pr_scores': health_trend.get('pr_scores', []),
+                    'contributor_scores': health_trend.get('contributor_scores', []),
+                    'maintenance_scores': health_trend.get('maintenance_scores', []),
+                }
+                payload['chart_payloads'] = chart_payloads
+            return payload
+
+        # Step 2: Fallback reconstruction for legacy snapshots (Strict window cutoff filtering)
+        cutoff_dt, _ = self._get_window_cutoff(window)
+        cutoff_date = cutoff_dt.date()
+
         repo_data = {
             'owner': repo_obj.owner,
             'name': repo_obj.name,
@@ -392,8 +489,8 @@ class AnalysisService:
         ]
         contributor_stats = AnalyticsEngine.calculate_contributor_statistics(contributors_raw)
 
-        # Commits
-        commits_db = repo_obj.commit_activities.all()
+        # Commits: strictly filter by window cutoff date
+        commits_db = repo_obj.commit_activities.filter(date__gte=cutoff_date)
         commits_reconstructed = []
         for ca in commits_db:
             for _ in range(ca.commit_count):
@@ -405,8 +502,8 @@ class AnalysisService:
                 })
         commit_stats = AnalyticsEngine.calculate_commit_statistics(commits_reconstructed, analysis_window=window)
 
-        # Issues & PRs
-        issues_db = repo_obj.issues.all()
+        # Issues & PRs: strictly filter by window cutoff datetime
+        issues_db = repo_obj.issues.filter(created_at__gte=cutoff_dt)
         issues_raw = [
             {
                 'issue_number': i.issue_number,
@@ -419,7 +516,7 @@ class AnalysisService:
         ]
         issue_stats = AnalyticsEngine.calculate_issue_statistics(issues_raw, total_repo_open_issues=repo_obj.open_issues)
 
-        prs_db = repo_obj.pull_requests.all()
+        prs_db = repo_obj.pull_requests.filter(created_at__gte=cutoff_dt)
         prs_raw = [
             {
                 'pr_number': p.pr_number,
@@ -470,6 +567,8 @@ class AnalysisService:
             coverage_summary=coverage_summary,
             window=window,
             from_cache=True,
+            issues_raw=issues_raw,
+            prs_raw=prs_raw,
         )
 
     def _assemble_dashboard_payload(
@@ -487,6 +586,8 @@ class AnalysisService:
         coverage_summary: Dict[str, Any],
         window: str,
         from_cache: bool = False,
+        issues_raw: Optional[list] = None,
+        prs_raw: Optional[list] = None,
     ) -> Dict[str, Any]:
         """
         Assembles all formatted metrics and JSON payloads for the template render.
@@ -503,7 +604,7 @@ class AnalysisService:
         }
 
         chart_payloads = {
-            'commit_trend': json.dumps({
+            'commit_trend': {
                 'labels_30d': commit_stats['trend_labels_30d'],
                 'data_30d': commit_stats['trend_data_30d'],
                 'labels_90d': commit_stats['trend_labels_90d'],
@@ -512,26 +613,26 @@ class AnalysisService:
                 'data_6m': commit_stats['trend_data_6m'],
                 'labels_1y': commit_stats.get('trend_labels_1y', []),
                 'data_1y': commit_stats.get('trend_data_1y', []),
-            }),
-            'issues_trend': json.dumps({
+            },
+            'issues_trend': {
                 'labels': issue_stats['trend_labels'],
                 'opened': issue_stats['opened_trend'],
                 'closed': issue_stats['closed_trend'],
-            }),
-            'prs_status': json.dumps({
+            },
+            'prs_status': {
                 'labels': pr_stats['chart_labels'],
                 'data': pr_stats['chart_data'],
-            }),
-            'languages': json.dumps({
+            },
+            'languages': {
                 'labels': language_dist['chart_labels'],
                 'data': language_dist['chart_data'],
                 'colors': language_dist['chart_colors'],
-            }),
-            'contributors': json.dumps({
+            },
+            'contributors': {
                 'labels': contributor_stats['chart_labels'],
                 'data': contributor_stats['chart_data'],
-            }),
-            'health_trend': json.dumps({
+            },
+            'health_trend': {
                 'labels': health_trend['labels'],
                 'scores': health_trend['scores'],
                 'stars': health_trend['stars'],
@@ -540,7 +641,7 @@ class AnalysisService:
                 'pr_scores': health_trend.get('pr_scores', []),
                 'contributor_scores': health_trend.get('contributor_scores', []),
                 'maintenance_scores': health_trend.get('maintenance_scores', []),
-            }),
+            },
         }
 
         return {
@@ -549,6 +650,11 @@ class AnalysisService:
             'languages': language_stats,
             'language_dist': language_dist,
             'health': health_metrics,
+            'health_score': health_metrics.get('total_score', 0),
+            'health_tier': health_metrics.get('health_tier', 'Moderate'),
+            'components': health_metrics.get('components', {}),
+            'pillar_breakdowns': health_metrics.get('pillar_breakdowns', {}),
+            'analyzed_at': datetime.now(timezone.utc),
             'contributors': contributors_raw,
             'contributor_stats': contributor_stats,
             'commit_stats': commit_stats,
@@ -557,6 +663,10 @@ class AnalysisService:
             'health_trend': health_trend,
             'chart_payloads': chart_payloads,
             'coverage': coverage_summary,
+            'data_coverage': coverage_summary,
+            'issues_sample': issues_raw or [],
+            'prs_sample': prs_raw or [],
             'current_window': window,
+            'analysis_window': window,
             'is_cached': from_cache,
         }

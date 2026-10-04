@@ -54,25 +54,32 @@ def analyze_view(request: HttpRequest) -> HttpResponse:
     """
     Validates repository input and window, invokes AnalysisService to handle
     API ingestion, caching, Pandas analytics, and database synchronization,
-    then renders the intelligence dashboard.
+    then renders the intelligence dashboard. Supports POST with CSRF for refresh.
     """
     raw_repo = ""
     window = "90d"
-    force_refresh = request.GET.get('refresh', '').lower() in ('true', '1', 'yes')
+    force_refresh = False
 
     if request.method == 'POST':
         form = RepositorySearchForm(request.POST)
         if form.is_valid():
             raw_repo = form.cleaned_data['repository']
             window = form.cleaned_data.get('window') or '90d'
+            force_refresh = request.POST.get('refresh', '').lower() in ('true', '1', 'yes')
         else:
-            for field, errors in form.errors.items():
-                for error in errors:
-                    messages.error(request, error)
-            return redirect('home')
+            # Check for direct refresh POST payload
+            raw_repo = (request.POST.get('repository') or request.POST.get('repo') or '').strip()
+            window = request.POST.get('window', '90d').strip().lower()
+            force_refresh = request.POST.get('refresh', '').lower() in ('true', '1', 'yes')
+            if not raw_repo:
+                for field, errors in form.errors.items():
+                    for error in errors:
+                        messages.error(request, error)
+                return redirect('home')
     else:
         raw_repo = (request.GET.get('repo') or request.GET.get('repository') or '').strip()
         window = request.GET.get('window', '90d').strip().lower()
+        force_refresh = request.GET.get('refresh', '').lower() in ('true', '1', 'yes')
         if not raw_repo:
             return redirect('home')
 
@@ -89,8 +96,8 @@ def analyze_view(request: HttpRequest) -> HttpResponse:
     analysis_svc = AnalysisService()
     try:
         context = analysis_svc.run_analysis(
-            owner=owner,
-            repo_name=repo_name,
+            owner,
+            repo_name,
             window=window,
             force_refresh=force_refresh
         )
@@ -116,19 +123,52 @@ def analyze_view(request: HttpRequest) -> HttpResponse:
 
 def history_view(request: HttpRequest) -> HttpResponse:
     """
-    Displays the catalog of previously analyzed repositories saved in PostgreSQL,
-    with search, sorting, health scores, and score change indicators.
+    Displays the catalog of previously analyzed repositories saved in the database,
+    with server-side search, sorting, health scores, filters, and standard Django pagination.
     """
+    from django.core.paginator import Paginator
+
     query = request.GET.get('q', '').strip()
     sort_by = request.GET.get('sort', 'recent').strip().lower()
+    window_filter = request.GET.get('window', '').strip()
+    lang_filter = request.GET.get('lang', '').strip()
+    tier_filter = request.GET.get('tier', '').strip()
+    page_number = request.GET.get('page')
 
-    repo_list = RepositoryService.get_history_catalog(query=query, sort_by=sort_by)
+    repo_list = RepositoryService.get_history_catalog(
+        query=query,
+        sort_by=sort_by,
+        window_filter=window_filter,
+        lang_filter=lang_filter,
+        tier_filter=tier_filter
+    )
+
+    paginator = Paginator(repo_list, 15)  # 15 repositories per page
+    page_obj = paginator.get_page(page_number)
+
+    available_languages = list(
+        Repository.objects.exclude(language__in=['', 'Not specified'])
+        .values_list('language', flat=True)
+        .distinct()
+        .order_by('language')
+    )
 
     return render(request, 'history.html', {
-        'repo_list': repo_list,
+        'page_obj': page_obj,
+        'repo_list': page_obj.object_list,
         'query': query,
         'sort_by': sort_by,
-        'total_count': len(repo_list),
+        'window': window_filter,
+        'window_filter': window_filter,
+        'lang': lang_filter,
+        'language': lang_filter,
+        'lang_filter': lang_filter,
+        'tier': tier_filter,
+        'tier_filter': tier_filter,
+        'tiers': ['Excellent', 'Good', 'Moderate', 'At Risk'],
+        'languages': available_languages,
+        'available_languages': available_languages,
+        'total_count': paginator.count,
     })
 
 
@@ -156,23 +196,29 @@ def compare_view(request: HttpRequest) -> HttpResponse:
     repo1_input = request.GET.get('repo1', '').strip()
     repo2_input = request.GET.get('repo2', '').strip()
     repo3_input = request.GET.get('repo3', '').strip()
+    window = request.GET.get('window', '90d').strip().lower()
 
     raw_candidates = [r for r in [repo1_input, repo2_input, repo3_input] if r]
 
     comparison_results = None
     comparison_chart_json = None
+    comparison_chart_data = None
 
     if len(raw_candidates) >= 2:
-        comp_data = RepositoryService.compare_repositories(raw_candidates)
+        comp_data = RepositoryService.compare_repositories(raw_candidates, window=window)
         if comp_data:
             comparison_results = comp_data['comparison']
             comparison_chart_json = comp_data['chart_json']
+            comparison_chart_data = comp_data.get('comparison_chart_data')
 
     return render(request, 'compare.html', {
         'form': form,
         'candidates': raw_candidates,
         'comparison': comparison_results,
         'chart_json': comparison_chart_json,
+        'comparison_chart_data': comparison_chart_data,
+        'window': window,
+        'analysis_window': window,
     })
 
 

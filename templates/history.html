@@ -19,31 +19,61 @@
         <!-- Search & Filter Controls -->
         <div class="card border shadow-xs p-3 mb-4 bg-white">
             <form method="GET" action="{% url 'history' %}" class="row g-2 align-items-center">
-                <div class="col-md-7">
+                <div class="col-lg-4 col-md-6">
                     <div class="input-group">
                         <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                        <input type="text" name="q" value="{{ query|default:'' }}" class="form-control border-start-0 ps-0" placeholder="Search by repository name, owner, description, or language...">
+                        <input type="text" name="q" value="{{ query|default:'' }}" class="form-control border-start-0 ps-0" placeholder="Search repo, owner, or description...">
                     </div>
                 </div>
-                <div class="col-md-3">
-                    <select name="sort" class="form-select" onchange="this.form.submit()">
-                        <option value="recent" {% if sort_by == 'recent' %}selected{% endif %}>Sort by: Recently Analyzed</option>
-                        <option value="health" {% if sort_by == 'health' %}selected{% endif %}>Sort by: Highest Health Score</option>
-                        <option value="stars" {% if sort_by == 'stars' %}selected{% endif %}>Sort by: Most Stars</option>
-                        <option value="name" {% if sort_by == 'name' %}selected{% endif %}>Sort by: Repository Name (A-Z)</option>
+                <div class="col-lg-2 col-md-3 col-6">
+                    <select name="window" class="form-select text-secondary" onchange="this.form.submit()">
+                        <option value="">All Windows</option>
+                        <option value="30d" {% if window == '30d' %}selected{% endif %}>30 Days</option>
+                        <option value="90d" {% if window == '90d' %}selected{% endif %}>90 Days</option>
+                        <option value="180d" {% if window == '180d' %}selected{% endif %}>6 Months</option>
+                        <option value="365d" {% if window == '365d' %}selected{% endif %}>1 Year</option>
                     </select>
                 </div>
-                <div class="col-md-2 d-flex gap-2">
-                    <button type="submit" class="btn os-btn-primary w-100">Filter</button>
-                    {% if query %}
-                        <a href="{% url 'history' %}" class="btn os-btn-secondary">Reset</a>
-                    {% endif %}
+                <div class="col-lg-2 col-md-3 col-6">
+                    <select name="tier" class="form-select text-secondary" onchange="this.form.submit()">
+                        <option value="">All Tiers</option>
+                        {% for t in tiers %}
+                            <option value="{{ t }}" {% if tier == t %}selected{% endif %}>{{ t }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-lg-2 col-md-6 col-6">
+                    <select name="lang" class="form-select text-secondary" onchange="this.form.submit()">
+                        <option value="">All Languages</option>
+                        {% for l in languages %}
+                            <option value="{{ l }}" {% if language == l %}selected{% endif %}>{{ l }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-lg-2 col-md-6 col-6">
+                    <select name="sort" class="form-select text-secondary" onchange="this.form.submit()">
+                        <option value="recent" {% if sort_by == 'recent' %}selected{% endif %}>Recent First</option>
+                        <option value="health" {% if sort_by == 'health' %}selected{% endif %}>Highest Score</option>
+                        <option value="stars" {% if sort_by == 'stars' %}selected{% endif %}>Most Stars</option>
+                        <option value="name" {% if sort_by == 'name' %}selected{% endif %}>Name (A-Z)</option>
+                    </select>
+                </div>
+                <div class="col-12 d-flex justify-content-between align-items-center mt-2 pt-2 border-top">
+                    <div class="extra-small text-muted">
+                        Showing <strong>{{ page_obj.start_index|default:0 }}</strong> to <strong>{{ page_obj.end_index|default:0 }}</strong> of <strong>{{ page_obj.paginator.count|default:0 }}</strong> analyzed repositories
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-sm os-btn-primary px-3">Apply Filters</button>
+                        {% if query or window or tier or language or sort_by != 'recent' %}
+                            <a href="{% url 'history' %}" class="btn btn-sm os-btn-secondary">Clear All</a>
+                        {% endif %}
+                    </div>
                 </div>
             </form>
         </div>
 
         {% if repo_list %}
-            <div class="card border shadow-sm">
+            <div class="card border shadow-sm mb-4">
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0">
                         <thead class="table-light">
@@ -134,21 +164,76 @@
                     </table>
                 </div>
             </div>
+
+            <!-- Server-Side Pagination Controls -->
+            {% if page_obj.has_other_pages %}
+            <nav aria-label="History Pagination" class="d-flex justify-content-center">
+                <ul class="pagination pagination-sm mb-0">
+                    {% if page_obj.has_previous %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page=1{% if query %}&q={{ query }}{% endif %}{% if window %}&window={{ window }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if language %}&lang={{ language }}{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}" aria-label="First">
+                                <span aria-hidden="true">&laquo;&laquo;</span>
+                            </a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if window %}&window={{ window }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if language %}&lang={{ language }}{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}" aria-label="Previous">
+                                <span aria-hidden="true">&laquo;</span>
+                            </a>
+                        </li>
+                    {% else %}
+                        <li class="page-item disabled"><span class="page-link">&laquo;&laquo;</span></li>
+                        <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
+                    {% endif %}
+
+                    {% for num in page_obj.paginator.page_range %}
+                        {% if page_obj.number == num %}
+                            <li class="page-item active" aria-current="page"><span class="page-link">{{ num }}</span></li>
+                        {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ num }}{% if query %}&q={{ query }}{% endif %}{% if window %}&window={{ window }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if language %}&lang={{ language }}{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}">{{ num }}</a>
+                            </li>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if page_obj.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if window %}&window={{ window }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if language %}&lang={{ language }}{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}" aria-label="Next">
+                                <span aria-hidden="true">&raquo;</span>
+                            </a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if query %}&q={{ query }}{% endif %}{% if window %}&window={{ window }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if language %}&lang={{ language }}{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}" aria-label="Last">
+                                <span aria-hidden="true">&raquo;&raquo;</span>
+                            </a>
+                        </li>
+                    {% else %}
+                        <li class="page-item disabled"><span class="page-link">&raquo;</span></li>
+                        <li class="page-item disabled"><span class="page-link">&raquo;&raquo;</span></li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+
         {% else %}
             <div class="card border shadow-sm p-5 text-center">
                 <div class="py-4">
                     <i class="bi bi-inbox fs-1 text-muted d-block mb-3"></i>
                     <h3 class="h5 fw-bold text-dark mb-2">No Repositories Found</h3>
                     <p class="text-secondary small mb-4">
-                        {% if query %}
-                            No stored repositories match your query "{{ query }}". Try searching another term or analyze a new repository.
+                        {% if query or window or tier or language %}
+                            No stored repositories match your current filter criteria. Try clearing some filters or search for another repository.
                         {% else %}
                             Your database has no analyzed repositories yet. Start by analyzing any public GitHub project.
                         {% endif %}
                     </p>
-                    <a href="{% url 'home' %}" class="btn os-btn-primary px-4">
-                        <i class="bi bi-search me-1"></i> Analyze a Repository
-                    </a>
+                    <div class="d-flex justify-content-center gap-2">
+                        {% if query or window or tier or language %}
+                            <a href="{% url 'history' %}" class="btn os-btn-secondary px-4">Clear Filters</a>
+                        {% endif %}
+                        <a href="{% url 'home' %}" class="btn os-btn-primary px-4">
+                            <i class="bi bi-search me-1"></i> Analyze a Repository
+                        </a>
+                    </div>
                 </div>
             </div>
         {% endif %}

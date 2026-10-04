@@ -229,6 +229,7 @@ class RepositoryAnalysis(models.Model):
     issue_resolution_rate = models.FloatField(default=0.0)
     pr_merge_rate = models.FloatField(default=0.0)
     data_coverage = models.JSONField(default=dict, blank=True)
+    snapshot_payload = models.JSONField(default=dict, blank=True, help_text="Complete isolated analytics payload for this snapshot")
 
     class Meta:
         verbose_name = 'Repository Analysis'

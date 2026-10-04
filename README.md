@@ -7,7 +7,7 @@
 [![Pandas](https://img.shields.io/badge/Pandas-2.2+-150458?style=flat&logo=pandas&logoColor=white)](https://pandas.pydata.org/)
 [![Chart.js](https://img.shields.io/badge/Chart.js-4.4-FF6384?style=flat&logo=chartdotjs&logoColor=white)](https://www.chartjs.org/)
 [![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3-7952B3?style=flat&logo=bootstrap&logoColor=white)](https://getbootstrap.com/)
-[![Tests](https://img.shields.io/badge/Tests-63%20Passed-success?style=flat&logo=pytest&logoColor=white)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-72%20Passed-success?style=flat&logo=pytest&logoColor=white)](#testing)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **OpenSourceLens** is a production-grade open-source project intelligence and health analytics platform built as part of the **Open Source Technologies (OST)** engineering curriculum. It transforms raw telemetry from the public GitHub REST API into actionable engineering metrics, evaluating repository activity, triage responsiveness, code integration, maintainer diversity, and hygiene through a transparent, reproducible, multi-signal methodology.
@@ -323,11 +323,11 @@ $$\text{Health Score} = 0.25 \times S_{\text{activity}} + 0.20 \times S_{\text{i
 
 | Pillar | Weight | Signals Evaluated | Formula / Logic |
 | :--- | :---: | :--- | :--- |
-| **Activity** | **25%** | Commit recency, commit velocity, weekly frequency | - **Recency:** $\le 3\text{d} \to 95$, $\le 7\text{d} \to 90$, $\le 30\text{d} \to 80$, $>180\text{d} \to 30$<br>- **Velocity:** Scaled up to 100 based on average commits per active day. |
-| **Issue Management** | **20%** | Sample resolution rate, median close days, backlog age | - **Resolution Rate:** Up to 50 pts.<br>- **Median Close Time:** $\le 3\text{d} \to 30\text{ pts}$, $\le 14\text{d} \to 20\text{ pts}$, $>60\text{d} \to 5\text{ pts}$.<br>- **Backlog:** Penalty applied for old open issues (>90d). |
-| **PR Activity** | **20%** | Merge rate, merge turnaround speed, open volume | - **Merge Rate:** Scaled up to 60 pts.<br>- **Turnaround:** $\le 24\text{h} \to 40\text{ pts}$, $\le 7\text{d} \to 30\text{ pts}$, $>30\text{d} \to 10\text{ pts}$. |
-| **Contributor Diversity** | **15%** | Contributor volume, maintainer concentration (HHI) | - **Base:** Evaluates recorded contributor count.<br>- **Concentration:** Low HHI ($<1500$) receives full marks; single-maintainer dominance ($>5000$) receives lower resilience scores. |
-| **Maintenance & Hygiene** | **20%** | License presence, project description, archive status | - Valid OSI-compliant license detected (+35 pts).<br>- Clear repository description (+20 pts).<br>- Project topics defined (+15 pts).<br>- Active non-archived, non-forked status (+30 pts). |
+| **Activity** | **25%** | Recency (40%), Frequency (30%), Consistency (15%), Trend (15%) | Multi-signal normalization (0–100):<br>- **Recency (40%):** Days since last push ($\le 3\text{d} \to 40$, $\le 7\text{d} \to 36$, $\le 14\text{d} \to 32$, $\le 30\text{d} \to 28$, $>180\text{d} \to 4$).<br>- **Frequency (30%):** Commit count normalized by window days.<br>- **Consistency (15%):** Ratio of active commit days to total calendar days.<br>- **Trend (15%):** Velocity ratio of recent vs. prior window half. |
+| **Issue Management** | **20%** | Sample resolution rate (45%), median close time (35%), backlog hygiene (20%) | Evaluates analyzed issue sample within window:<br>- **Resolution Rate:** $(\text{Closed} / \text{Analyzed}) \times 45$.<br>- **Median Close Time:** $\le 24\text{h} \to 35\text{ pts}$, $\le 72\text{h} \to 28\text{ pts}$, $\le 1\text{wk} \to 22\text{ pts}$, $>30\text{d} \to 8\text{ pts}$.<br>- **Backlog Hygiene:** Penalty applied for issues remaining unresolved $>90\text{d}$. |
+| **PR Activity** | **20%** | Merge rate (50%), median merge turnaround (35%), throughput (15%) | Window-constrained PR analytics:<br>- **Merge Rate:** $(\text{Merged} / \text{Analyzed}) \times 50$.<br>- **Turnaround:** $\le 24\text{h} \to 35\text{ pts}$, $\le 72\text{h} \to 28\text{ pts}$, $\le 1\text{wk} \to 20\text{ pts}$, $>30\text{d} \to 5\text{ pts}$.<br>- **Throughput:** Normalized PR count across window duration.<br>- *Note:* Code review comment depth is not collected or simulated. |
+| **Contributor Diversity** | **15%** | Contributor count (40%), HHI concentration (40%), top contributor share (20%) | Evaluates concentration among analyzed contributors:<br>- **Base:** Evaluates analyzed contributor volume ($\ge 20 \to 40$, $\ge 10 \to 32$, $\ge 5 \to 24$, $1 \to 4$).<br>- **HHI Index:** $\text{HHI} < 1500 \to 40\text{ pts}$, $<2500 \to 30\text{ pts}$, $<4000 \to 20\text{ pts}$, $\ge 4000 \to 10\text{ pts}$.<br>- **Lead Author:** Top contributor share $<35\% \to 20\text{ pts}$, $\ge 70\% \to 4\text{ pts}$. |
+| **Maintenance & Hygiene** | **20%** | License (30%), active status (25%), description (20%), topics (15%), branch (10%) | Direct 0–100 normalization (no overflow capping):<br>- Valid SPDX open-source license detected: +30 pts.<br>- Active non-archived status: +25 pts.<br>- Meaningful repository description: +20 pts.<br>- Repository topics tags defined: +15 pts.<br>- Standard default branch (`main`/`master`): +10 pts. |
 
 ### Score Categories
 - **85–100:** *Excellent* — Highly active, structured triage, resilient community.
@@ -335,7 +335,7 @@ $$\text{Health Score} = 0.25 \times S_{\text{activity}} + 0.20 \times S_{\text{i
 - **50–69:** *Moderate* — Slower review turnaround or higher maintainer dependency.
 - **0–49:** *At Risk* — Stagnant commit activity or lack of active maintenance.
 
-> **Methodology Note:** These categories are analytical indicators defined by OpenSourceLens for comparative research and should not be interpreted as absolute software-quality verdicts.
+> **Methodology Note:** These categories are application-defined analytical classifications and are not universal software-quality standards. Concentration metrics represent the analyzed contributors returned by the GitHub REST API.
 
 ---
 
@@ -462,7 +462,7 @@ Open your browser to: **`http://127.0.0.1:8000/`**
 
 ## Testing
 
-The project includes an automated test suite with **63 test cases** covering every layer of the system. Tests use Python's `unittest.mock` to mock external GitHub API calls and run against an isolated SQLite test database with zero external network or database dependencies.
+The project includes an automated test suite with **72 test cases** covering every layer of the system. Tests use Python's `unittest.mock` to mock external GitHub API calls and run against an isolated SQLite test database with zero external network or database dependencies.
 
 Run the test suite:
 
@@ -472,17 +472,18 @@ python manage.py test
 
 ### Test Coverage Highlights:
 - **`tests/test_validation.py` (7 tests):** Format validation for `owner/repo` formats, URLs, and edge-case syntax.
-- **`tests/test_github_service.py` (12 tests):** Pagination pagination cycles, HTTP 404, HTTP 401, HTTP 403/429 rate limit reset parsing, HTTP 500 server errors, request timeouts, and malformed JSON.
+- **`tests/test_github_service.py` (12 tests):** Pagination cycles, HTTP 404, HTTP 401, HTTP 403/429 rate limit reset parsing, HTTP 500 server errors, request timeouts, and malformed JSON.
 - **`tests/test_models.py` (9 tests):** Database relationships, cascading deletes, unique constraints, and atomic transaction rollback.
 - **`tests/test_analytics.py` (17 tests):** Pandas time-series grouping, outlier-resilient median close times, HHI concentration calculations, and zero-division edge cases.
 - **`tests/test_views.py` (18 tests):** View lifecycles, caching verification, force refresh (`?refresh=true`), configurable window parameters (`30d`, `90d`, `180d`, `365d`), error redirects, and edge-case repositories (0 issues, 0 PRs, single contributor, archived, and forked repos).
+- **`tests/test_hardening.py` (9 tests):** Window & cache isolation (30d vs 90d), immutable historical snapshots, stale entity synchronization pruning, pull request window cutoff filtering, zero synthetic comparison fallback verification, active-day vs calendar-day commit averages, CSRF protection on POST refresh, and `.env` version control isolation.
 
 ```text
-Found 63 test(s).
+Found 72 test(s).
 System check identified no issues (0 silenced).
-...............................................................
+........................................................................
 ----------------------------------------------------------------------
-Ran 63 tests in 0.422s
+Ran 72 tests in 5.157s
 
 OK
 ```
@@ -690,7 +691,7 @@ This project directly demonstrates core principles of the **Open Source Technolo
 | **6. Frontend & Responsive UI** | Bootstrap 5.3, semantic HTML5, and accessible Vanilla CSS design system. | Responsive design, modern developer tool aesthetics, and UI component hierarchies. |
 | **7. Interactive Visualization** | Chart.js 4.4 Canvas rendering with dynamic range filtering. | Visual communication of time-series data, distributions, and comparative metrics. |
 | **8. CRUD & Data Lifecycle** | Repository history catalog, detail inspection, and snapshot updates. | Create, Read, Update, and Delete operations with atomic persistence. |
-| **9. Automated Quality Assurance** | 63 automated tests using `unittest` and `unittest.mock`. | Unit testing, integration testing, edge-case coverage, and mocking external services. |
+| **9. Automated Quality Assurance** | 72 automated tests using `unittest` and `unittest.mock`. | Unit testing, integration testing, edge-case coverage, and mocking external services. |
 | **10. Open Source Licensing** | SPDX license detection, project documentation check, and MIT License. | Open-source governance, copyleft vs. permissive licensing, and project sustainability. |
 
 ---

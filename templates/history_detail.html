@@ -109,8 +109,9 @@
 
 {% block extra_js %}
 {% if trend.has_trend %}
+{{ trend|json_script:"trend-data-payload" }}
 <script>
-    const trendData = {{ trend_json|safe }};
+    const trendData = JSON.parse(document.getElementById('trend-data-payload').textContent);
     const ctx = document.getElementById('historicalDetailChart');
     if (ctx) {
         new Chart(ctx, {

@@ -92,48 +92,28 @@
                     </div>
                 </div>
 
-                <!-- Truthful Multi-Step Loading Overlay (Section 32) -->
+                <!-- Truthful Indeterminate Loading Overlay (Section 31) -->
                 <div class="os-loading-overlay d-none" id="analysisLoadingOverlay" role="dialog" aria-modal="true" aria-labelledby="loadingTitle">
-                    <div class="card os-loading-card shadow border p-4 text-start">
-                        <div class="d-flex align-items-center justify-content-between mb-3">
-                            <h5 class="fw-bold mb-0 text-dark d-flex align-items-center gap-2" id="loadingTitle">
-                                <span class="spinner-border spinner-border-sm text-primary" role="status"></span>
-                                Analyzing Repository
-                            </h5>
-                            <span class="badge bg-light text-dark border font-monospace" id="loadingRepoName">repository</span>
+                    <div class="card os-loading-card shadow border p-4 text-center">
+                        <div class="mb-3">
+                            <div class="spinner-border text-primary" style="width: 2.75rem; height: 2.75rem;" role="status">
+                                <span class="visually-hidden">Analyzing repository...</span>
+                            </div>
                         </div>
-                        <p class="text-secondary small mb-3">
-                            Running analytical pipeline against GitHub REST API and executing Pandas computations...
+                        <h5 class="fw-bold mb-1 text-dark" id="loadingTitle">
+                            Analyzing Repository
+                        </h5>
+                        <div class="font-monospace text-muted small mb-3" id="loadingRepoName">repository</div>
+                        
+                        <div class="progress mb-3" style="height: 6px;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" role="progressbar" style="width: 100%"></div>
+                        </div>
+
+                        <p class="text-secondary small mb-2" id="loadingStatusText">
+                            Connecting to GitHub REST API, fetching repository telemetry, and running analytics engine...
                         </p>
-                        <div class="os-loading-steps list-group list-group-flush border rounded-3 mb-2">
-                            <div class="list-group-item d-flex align-items-center gap-3 py-2 text-success" id="step-validate">
-                                <span class="os-step-icon"><i class="bi bi-check-circle-fill"></i></span>
-                                <span class="small fw-medium">Validating repository format</span>
-                            </div>
-                            <div class="list-group-item d-flex align-items-center gap-3 py-2 text-primary" id="step-connect">
-                                <span class="os-step-icon"><i class="bi bi-arrow-repeat spin"></i></span>
-                                <span class="small fw-medium">Connecting to GitHub REST API</span>
-                            </div>
-                            <div class="list-group-item d-flex align-items-center gap-3 py-2 text-muted" id="step-meta">
-                                <span class="os-step-icon"><i class="bi bi-circle"></i></span>
-                                <span class="small fw-medium">Collecting repository metadata & languages</span>
-                            </div>
-                            <div class="list-group-item d-flex align-items-center gap-3 py-2 text-muted" id="step-commits">
-                                <span class="os-step-icon"><i class="bi bi-circle"></i></span>
-                                <span class="small fw-medium">Collecting paginated commit activity</span>
-                            </div>
-                            <div class="list-group-item d-flex align-items-center gap-3 py-2 text-muted" id="step-issues">
-                                <span class="os-step-icon"><i class="bi bi-circle"></i></span>
-                                <span class="small fw-medium">Collecting issues & pull requests</span>
-                            </div>
-                            <div class="list-group-item d-flex align-items-center gap-3 py-2 text-muted" id="step-analytics">
-                                <span class="os-step-icon"><i class="bi bi-circle"></i></span>
-                                <span class="small fw-medium">Processing Pandas analytics & 5-pillar scoring</span>
-                            </div>
-                            <div class="list-group-item d-flex align-items-center gap-3 py-2 text-muted" id="step-save">
-                                <span class="os-step-icon"><i class="bi bi-circle"></i></span>
-                                <span class="small fw-medium">Synchronizing records & saving snapshot</span>
-                            </div>
+                        <div class="extra-small text-muted border-top pt-2">
+                            This typically takes 2–5 seconds depending on repository activity and GitHub API response time.
                         </div>
                     </div>
                 </div>
