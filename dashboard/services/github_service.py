@@ -31,18 +31,73 @@ class GitHubInvalidRepoError(GitHubAPIError):
 
 class GitHubRepoNotFoundError(GitHubAPIError):
     """Raised when repository does not exist on GitHub (HTTP 404)."""
-    pass
+    def __init__(self, message: str = "Repository not found on GitHub.", status_code: int = 404):
+        super().__init__(message, status_code=status_code)
+
+
+class GitHubAuthenticationError(GitHubAPIError):
+    """Raised when GitHub API authentication fails (HTTP 401)."""
+    def __init__(self, message: str = "GitHub API authentication failed (HTTP 401).", status_code: int = 401):
+        super().__init__(message, status_code=status_code)
+
+
+class GitHubForbiddenError(GitHubAPIError):
+    """Raised when repository is private, restricted, or forbidden (HTTP 403 with quota remaining)."""
+    def __init__(self, message: str = "Access to repository forbidden or private (HTTP 403).", status_code: int = 403):
+        super().__init__(message, status_code=status_code)
 
 
 class GitHubRateLimitExceededError(GitHubAPIError):
-    """Raised when GitHub API rate limit is exceeded (HTTP 403 / 429)."""
-    def __init__(self, message: str, reset_timestamp: Optional[int] = None, status_code: int = 403):
+    """Raised when GitHub API rate limit is exceeded (HTTP 403 / 429 with 0 remaining)."""
+    def __init__(
+        self,
+        message: str,
+        reset_timestamp: Optional[int] = None,
+        status_code: int = 403,
+        is_authenticated: bool = False,
+        remaining: int = 0,
+        limit: int = 60,
+        retry_after: Optional[int] = None,
+    ):
         super().__init__(message, status_code=status_code)
-        self.reset_timestamp = reset_timestamp
+        self.reset_timestamp = int(reset_timestamp) if reset_timestamp else None
+        self.is_authenticated = is_authenticated
+        self.remaining = remaining
+        self.limit = limit
+        self.retry_after = retry_after
+
+        # Precompute human-friendly reset intervals
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        if self.reset_timestamp:
+            try:
+                self.reset_dt = datetime.fromtimestamp(self.reset_timestamp, tz=timezone.utc)
+                self.reset_time_str = self.reset_dt.strftime('%H:%M:%S UTC')
+                self.reset_in_seconds = max(0, int(self.reset_timestamp - now_ts))
+                self.reset_in_minutes = max(0, int(round((self.reset_timestamp - now_ts) / 60.0)))
+            except Exception:
+                self.reset_dt = None
+                self.reset_time_str = "Shortly"
+                self.reset_in_seconds = retry_after or 60
+                self.reset_in_minutes = max(1, (retry_after or 60) // 60)
+        elif retry_after:
+            self.reset_dt = datetime.fromtimestamp(now_ts + retry_after, tz=timezone.utc)
+            self.reset_time_str = self.reset_dt.strftime('%H:%M:%S UTC')
+            self.reset_in_seconds = retry_after
+            self.reset_in_minutes = max(1, retry_after // 60)
+        else:
+            self.reset_dt = None
+            self.reset_time_str = "Shortly"
+            self.reset_in_seconds = 60
+            self.reset_in_minutes = 1
 
 
 class GitHubTimeoutError(GitHubAPIError):
     """Raised when a GitHub API request times out."""
+    pass
+
+
+class GitHubNetworkError(GitHubAPIError):
+    """Raised on connection drops, DNS lookup failures, or socket errors."""
     pass
 
 
@@ -52,23 +107,89 @@ GitHubRateLimitError = GitHubRateLimitExceededError
 
 class GitHubService:
     """
-    Service client for interacting with the public GitHub REST API.
-    Provides robust pagination, timeouts, error normalization, and rate-limit detection.
+    Authoritative service client for interacting with the public GitHub REST API.
+    Provides robust pagination, timeouts, error normalization, rate-limit detection,
+    and safe exponential backoff retries.
     """
 
     REPO_REGEX = re.compile(r'^[a-zA-Z0-9_\-\.]+\/[a-zA-Z0-9_\-\.]+$')
 
     def __init__(self, token: Optional[str] = None):
         self.base_url = getattr(settings, 'GITHUB_API_BASE_URL', 'https://api.github.com').rstrip('/')
-        self.token = token or getattr(settings, 'GITHUB_TOKEN', '')
+        raw_token = token if token is not None else getattr(settings, 'GITHUB_TOKEN', '')
+        self.token = str(raw_token).strip() if raw_token else ''
         self.timeout = getattr(settings, 'GITHUB_API_TIMEOUT', 12)
         self.session = requests.Session()
         self.session.headers.update({
-            'Accept': 'application/vnd.github.v3+json',
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
             'User-Agent': 'OpenSourceLens-OST-App',
         })
         if self.token:
             self.session.headers.update({'Authorization': f'Bearer {self.token}'})
+
+        # Log authentication presence without EVER logging secret values
+        logger.info("GitHubService initialized (authenticated: %s)", bool(self.token))
+
+    @property
+    def is_authenticated(self) -> bool:
+        """Returns True if a GitHub Personal Access Token is configured."""
+        return bool(self.token)
+
+    def get_rate_limit_status(self) -> Dict[str, Any]:
+        """
+        Retrieves real-time rate limit metrics directly from GET /rate_limit.
+        Returns structured diagnostic information without exposing token secrets.
+        """
+        url = f"{self.base_url}/rate_limit"
+        try:
+            response = self.session.get(url, timeout=min(5, self.timeout))
+            if response.status_code == 200:
+                data = response.json()
+                core = data.get('resources', {}).get('core', {}) or data.get('rate', {})
+                limit = int(core.get('limit', 5000 if self.token else 60))
+                remaining = int(core.get('remaining', 0))
+                reset_ts = int(core.get('reset', 0)) if core.get('reset') else None
+                used = int(core.get('used', 0))
+
+                reset_dt = datetime.fromtimestamp(reset_ts, tz=timezone.utc) if reset_ts else None
+                now_dt = datetime.now(timezone.utc)
+                reset_mins = max(0, int((reset_dt - now_dt).total_seconds() // 60)) if reset_dt else 0
+
+                return {
+                    'authenticated': bool(self.token),
+                    'limit': limit,
+                    'remaining': remaining,
+                    'used': used,
+                    'reset_timestamp': reset_ts,
+                    'reset_at': reset_dt.strftime('%H:%M:%S UTC') if reset_dt else 'N/A',
+                    'reset_in_minutes': reset_mins,
+                    'is_rate_limited': remaining == 0,
+                    'status': 'rate_limited' if remaining == 0 else 'ok',
+                }
+            elif response.status_code == 401:
+                return {
+                    'authenticated': False,
+                    'error': 'invalid_token',
+                    'message': 'Configured GITHUB_TOKEN is invalid or unauthorized (HTTP 401).',
+                    'limit': 0,
+                    'remaining': 0,
+                    'is_rate_limited': False,
+                    'status': 'auth_failed',
+                }
+        except Exception as e:
+            logger.warning(f"Could not retrieve rate limit status from GitHub: {e}")
+
+        return {
+            'authenticated': bool(self.token),
+            'limit': 5000 if self.token else 60,
+            'remaining': 0 if not self.token else 5000,
+            'reset_at': 'N/A',
+            'reset_timestamp': None,
+            'reset_in_minutes': 0,
+            'is_rate_limited': False,
+            'status': 'unknown',
+        }
 
     @classmethod
     def validate_and_normalize(cls, raw_input: str) -> Tuple[str, str]:
@@ -114,6 +235,8 @@ class GitHubService:
     def _handle_response(self, response: requests.Response, repo_str: str) -> Any:
         """
         Centralized HTTP error response handler for GitHub API requests.
+        Differentiates 401 authentication errors, 403 rate limits, 403 forbidden permissions,
+        404 not found, 429 too many requests, and 5xx server errors.
         """
         if response.status_code == 200:
             try:
@@ -130,28 +253,71 @@ class GitHubService:
             )
 
         if response.status_code == 401:
-            logger.error("GitHub API unauthorized (401). Invalid token.")
-            raise GitHubAPIError(
+            logger.error("GitHub API unauthorized (401). Invalid or expired token.")
+            raise GitHubAuthenticationError(
                 "GitHub API authentication failed (HTTP 401). "
-                "Please verify your GITHUB_TOKEN configuration."
+                "Your configured GITHUB_TOKEN is invalid or has expired. "
+                "Please update your token in .env or remove it to use unauthenticated access."
             )
 
         if response.status_code in (403, 429):
-            rate_limit_remaining = response.headers.get('x-ratelimit-remaining', '')
-            reset_ts = response.headers.get('x-ratelimit-reset')
-            reset_str = ""
-            if reset_ts:
+            rate_limit_remaining = response.headers.get('x-ratelimit-remaining')
+            rate_limit_limit = int(response.headers.get('x-ratelimit-limit', 5000 if self.token else 60))
+            reset_ts_raw = response.headers.get('x-ratelimit-reset')
+            retry_after_raw = response.headers.get('retry-after')
+
+            reset_ts = None
+            if reset_ts_raw:
                 try:
-                    reset_dt = datetime.fromtimestamp(int(reset_ts), tz=timezone.utc)
-                    reset_str = f" Rate limit resets at {reset_dt.strftime('%H:%M:%S UTC')}."
-                except Exception:
+                    reset_ts = int(reset_ts_raw)
+                except ValueError:
                     pass
 
-            if rate_limit_remaining == '0' or 'rate limit' in response.text.lower() or response.status_code == 429:
-                logger.error(f"GitHub API rate limit exceeded.{reset_str}")
+            retry_after = None
+            if retry_after_raw:
+                try:
+                    retry_after = int(retry_after_raw)
+                except ValueError:
+                    pass
+
+            is_rate_limit = (
+                rate_limit_remaining == '0'
+                or response.status_code == 429
+                or 'rate limit' in response.text.lower()
+                or 'secondary rate limit' in response.text.lower()
+            )
+
+            if is_rate_limit:
+                reset_dt = datetime.fromtimestamp(reset_ts, tz=timezone.utc) if reset_ts else None
+                reset_str = f" Rate limit resets at {reset_dt.strftime('%H:%M:%S UTC')}." if reset_dt else ""
+
+                if self.token:
+                    msg = (
+                        f"GitHub API rate limit reached (5,000 req/hr tier).{reset_str} "
+                        "Please wait for your quota to reset before triggering live refreshes."
+                    )
+                else:
+                    msg = (
+                        f"GitHub API rate limit reached (60 req/hr unauthenticated tier).{reset_str} "
+                        "Configure a personal access token (GITHUB_TOKEN) in your .env file to increase your limit to 5,000 req/hr."
+                    )
+
+                logger.error(f"GitHub API rate limit exceeded (authenticated: {bool(self.token)}).{reset_str}")
                 raise GitHubRateLimitExceededError(
-                    f"GitHub API rate limit reached.{reset_str} "
-                    "Please configure a GITHUB_TOKEN in your .env file or wait before retrying."
+                    message=msg,
+                    reset_timestamp=reset_ts,
+                    status_code=response.status_code,
+                    is_authenticated=bool(self.token),
+                    remaining=0,
+                    limit=rate_limit_limit,
+                    retry_after=retry_after,
+                )
+            else:
+                # 403 without rate limit: Access forbidden or private repository
+                logger.warning(f"GitHub access forbidden for {repo_str} (HTTP 403, remaining: {rate_limit_remaining})")
+                raise GitHubForbiddenError(
+                    f"Access to repository '{repo_str}' was forbidden by GitHub (HTTP 403). "
+                    "This repository may be private, archived with restricted access, or blocked."
                 )
 
         if response.status_code in (500, 502, 503, 504):

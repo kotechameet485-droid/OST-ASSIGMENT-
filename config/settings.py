@@ -159,8 +159,8 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # GitHub API Configuration
-GITHUB_TOKEN = os.getenv('GITHUB_TOKEN', '')
-GITHUB_API_BASE_URL = os.getenv('GITHUB_API_BASE_URL', 'https://api.github.com')
+GITHUB_TOKEN = os.getenv('GITHUB_TOKEN', '').strip()
+GITHUB_API_BASE_URL = os.getenv('GITHUB_API_BASE_URL', 'https://api.github.com').rstrip('/')
 GITHUB_API_TIMEOUT = int(os.getenv('GITHUB_API_TIMEOUT', '12'))
 
 # Logging Configuration

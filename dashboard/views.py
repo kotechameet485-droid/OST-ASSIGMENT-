@@ -22,6 +22,8 @@ from dashboard.services.github_service import (
     GitHubAPIError,
     GitHubInvalidRepoError,
     GitHubRepoNotFoundError,
+    GitHubAuthenticationError,
+    GitHubForbiddenError,
     GitHubRateLimitExceededError,
     GitHubTimeoutError,
 )
@@ -104,9 +106,34 @@ def analyze_view(request: HttpRequest) -> HttpResponse:
     except GitHubRepoNotFoundError as e:
         messages.error(request, str(e))
         return redirect('home')
+    except GitHubAuthenticationError as e:
+        logger.error(f"Authentication failure for {repo_str}: {e}")
+        return render(request, 'errors/401.html', {'error': str(e)}, status=401)
+    except GitHubForbiddenError as e:
+        logger.warning(f"Forbidden/private repo {repo_str}: {e}")
+        return render(request, 'errors/403.html', {'error': str(e), 'repo_str': repo_str}, status=403)
     except GitHubRateLimitExceededError as e:
-        messages.error(request, str(e))
-        return redirect('home')
+        logger.warning(f"Rate limit reached without stored snapshot for {repo_str}: {e}")
+        stored_repos = []
+        try:
+            stored_repos = Repository.objects.prefetch_related('analyses').order_by('-fetched_at')[:6]
+        except Exception:
+            pass
+
+        return render(request, 'rate_limit.html', {
+            'repo_name': repo_str,
+            'window': window,
+            'rate_limit_info': {
+                'message': str(e),
+                'reset_timestamp': e.reset_timestamp,
+                'reset_time_str': getattr(e, 'reset_time_str', 'Shortly'),
+                'reset_in_minutes': getattr(e, 'reset_in_minutes', 0),
+                'reset_in_seconds': getattr(e, 'reset_in_seconds', 60),
+                'is_authenticated': getattr(e, 'is_authenticated', False),
+                'limit': getattr(e, 'limit', 60),
+            },
+            'stored_repos': stored_repos,
+        }, status=429)
     except GitHubTimeoutError as e:
         messages.error(request, str(e))
         return redirect('home')

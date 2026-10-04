@@ -397,3 +397,184 @@ class HistoricalWindowSeparationTests(TestCase):
         # Check immutability: older snapshot was not modified by the creation of the newer one
         self.assertEqual(snap_30d.analysis_window, '30d')
         self.assertEqual(snap_30d.health_score, 85)
+
+
+class TestDataIntegrityCases(TestCase):
+    """
+    Explicit regression validations for Phase 25 Data-Integrity Checks (Cases 1 - 6):
+      Case 1 & 2: 30D vs 365D analysis isolation and immutability.
+      Case 3: Comparison across 3 repos strictly enforces identical window (90D).
+      Case 4: Missing PR telemetry does not invent synthetic metrics.
+      Case 5: 30 contributors labeled as analyzed sample, not total population.
+      Case 6: 100 commits labeled as analyzed sample limit, not annual total.
+    """
+
+    def setUp(self):
+        self.now = datetime.now(timezone.utc)
+        self.mock_repo_payload = {
+            'owner': 'integrity',
+            'name': 'cases-repo',
+            'full_name': 'integrity/cases-repo',
+            'description': 'Data integrity audit repo',
+            'stars': 500,
+            'forks': 80,
+            'open_issues': 10,
+            'pushed_at': self.now.isoformat(),
+            'updated_at': self.now.isoformat(),
+            'created_at': (self.now - timedelta(days=600)).isoformat(),
+            'license': 'Apache-2.0',
+            'is_archived': False,
+            'is_fork': False,
+            'default_branch': 'main',
+            'topics': ['python', 'analytics'],
+        }
+
+    @patch('dashboard.services.analysis_service.GitHubService')
+    def test_case_1_and_case_2_window_isolation_and_immutability(self, MockGitHubService):
+        """
+        CASE 1: Analyze repo for 30D, then analyze for 365D. The 30D result must remain unchanged.
+        CASE 2: Analyze repo for 365D, then analyze for 30D. The 365D result must remain unchanged.
+        """
+        mock_gh = MockGitHubService.return_value
+        mock_gh.get_repository.return_value = self.mock_repo_payload
+        mock_gh.get_languages.return_value = {'Python': 90000}
+        mock_gh.get_contributors.return_value = [{'username': 'maintainer', 'contributions': 60, 'avatar_url': '', 'profile_url': ''}]
+
+        # 30D data: 6 commits
+        commits_30d = [
+            {'sha': f'sha30_{i}', 'date': (self.now - timedelta(days=i * 4)).isoformat(), 'message': f'Commit {i}', 'author': 'maintainer'}
+            for i in range(6)
+        ]
+        mock_gh.get_commits.return_value = commits_30d
+        mock_gh.get_issues.return_value = [{'number': 1, 'title': 'Issue 1', 'state': 'open', 'created_at': self.now.isoformat(), 'closed_at': None}]
+        mock_gh.get_pull_requests.return_value = [{'number': 10, 'title': 'PR 10', 'state': 'merged', 'created_at': self.now.isoformat(), 'merged_at': self.now.isoformat(), 'closed_at': None}]
+
+        service = AnalysisService()
+        result_30d_initial = service.run_analysis('integrity', 'cases-repo', window='30d', force_refresh=True)
+        initial_30d_commits = result_30d_initial['data_coverage']['commits_analyzed']
+        initial_30d_score = result_30d_initial['health_score']
+        self.assertEqual(initial_30d_commits, 6)
+
+        # 365D data: 50 commits spanning entire year
+        commits_365d = [
+            {'sha': f'sha365_{i}', 'date': (self.now - timedelta(days=i * 7)).isoformat(), 'message': f'Commit {i}', 'author': 'maintainer'}
+            for i in range(50)
+        ]
+        mock_gh.get_commits.return_value = commits_365d
+        result_365d_initial = service.run_analysis('integrity', 'cases-repo', window='365d', force_refresh=True)
+        initial_365d_commits = result_365d_initial['data_coverage']['commits_analyzed']
+        initial_365d_score = result_365d_initial['health_score']
+        self.assertEqual(initial_365d_commits, 50)
+
+        # CASE 1: Retrieve 30D result again. It MUST remain completely unchanged.
+        reconstructed_30d = service.run_analysis('integrity', 'cases-repo', window='30d', force_refresh=False)
+        self.assertEqual(reconstructed_30d['analysis_window'], '30d')
+        self.assertEqual(reconstructed_30d['data_coverage']['commits_analyzed'], initial_30d_commits)
+        self.assertEqual(reconstructed_30d['health_score'], initial_30d_score)
+
+        # CASE 2: Retrieve 365D result again. It MUST remain completely unchanged.
+        reconstructed_365d = service.run_analysis('integrity', 'cases-repo', window='365d', force_refresh=False)
+        self.assertEqual(reconstructed_365d['analysis_window'], '365d')
+        self.assertEqual(reconstructed_365d['data_coverage']['commits_analyzed'], initial_365d_commits)
+        self.assertEqual(reconstructed_365d['health_score'], initial_365d_score)
+
+    @patch('dashboard.services.analysis_service.GitHubService')
+    def test_case_3_comparison_across_three_repos_enforces_90d(self, MockGitHubService):
+        """
+        CASE 3: Compare Repo A, Repo B, Repo C using 90D. All must strictly use 90D.
+        """
+        mock_gh = MockGitHubService.return_value
+
+        def repo_factory(owner, repo):
+            return {
+                'owner': owner,
+                'name': repo,
+                'full_name': f'{owner}/{repo}',
+                'stars': 150,
+                'forks': 30,
+                'open_issues': 5,
+                'pushed_at': self.now.isoformat(),
+                'updated_at': self.now.isoformat(),
+                'created_at': (self.now - timedelta(days=400)).isoformat(),
+                'license': 'MIT',
+                'is_archived': False,
+                'is_fork': False,
+                'default_branch': 'main',
+                'topics': ['web'],
+            }
+
+        mock_gh.get_repository.side_effect = repo_factory
+        mock_gh.get_languages.return_value = {'TypeScript': 50000}
+        mock_gh.get_contributors.return_value = [{'username': 'core', 'contributions': 25, 'avatar_url': '', 'profile_url': ''}]
+        mock_gh.get_commits.return_value = [{'sha': 'c1', 'date': self.now.isoformat(), 'message': 'c1', 'author': 'core'}]
+        mock_gh.get_issues.return_value = [{'number': 1, 'title': 'bug', 'state': 'open', 'created_at': self.now.isoformat(), 'closed_at': None}]
+        mock_gh.get_pull_requests.return_value = [{'number': 5, 'title': 'fix', 'state': 'merged', 'created_at': self.now.isoformat(), 'merged_at': self.now.isoformat(), 'closed_at': None}]
+
+        comp = RepositoryService.compare_repositories(['org/repo-a', 'org/repo-b', 'org/repo-c'], window='90d')
+        self.assertIsNotNone(comp)
+        self.assertEqual(comp['analysis_window'], '90d')
+        self.assertEqual(len(comp['repositories']), 3)
+
+        for repo_entry in comp['repositories']:
+            self.assertEqual(repo_entry['analysis_window'], '90d')
+            self.assertEqual(repo_entry['data_coverage']['analysis_window'], '90d')
+
+    @patch('dashboard.services.analysis_service.GitHubService')
+    def test_case_4_zero_pr_telemetry_does_not_invent_fake_pr_metrics(self, MockGitHubService):
+        """
+        CASE 4: Remove/zero PR telemetry. Comparison must NOT invent fake PR metrics or arbitrary counts.
+        """
+        mock_gh = MockGitHubService.return_value
+        mock_gh.get_repository.return_value = self.mock_repo_payload
+        mock_gh.get_languages.return_value = {'Python': 50000}
+        mock_gh.get_contributors.return_value = [{'username': 'author', 'contributions': 10, 'avatar_url': '', 'profile_url': ''}]
+        mock_gh.get_commits.return_value = [{'sha': 'c1', 'date': self.now.isoformat(), 'message': 'c1', 'author': 'author'}]
+        mock_gh.get_issues.return_value = [{'number': 1, 'title': 'bug', 'state': 'open', 'created_at': self.now.isoformat(), 'closed_at': None}]
+        # PR telemetry is empty
+        mock_gh.get_pull_requests.return_value = []
+
+        comp = RepositoryService.compare_repositories(['integrity/cases-repo', 'integrity/cases-repo-2'], window='90d')
+        self.assertIsNotNone(comp)
+        repo_entry = comp['repositories'][0]
+
+        # Verify PR count is 0 and merge rate is 0.0 - no invented PR counts
+        self.assertEqual(repo_entry['prs_count'], 0)
+        self.assertEqual(repo_entry['pr_merge_rate'], 0.0)
+        self.assertEqual(repo_entry['data_coverage']['prs_analyzed'], 0)
+
+    def test_case_5_contributor_sample_transparency(self):
+        """
+        CASE 5: Only 30 contributors are fetched. UI / data coverage must clearly state
+        '30 analyzed contributors' (sample limit: 30), not claim '30 total contributors'.
+        """
+        contributors_30 = [{'username': f'user_{i}', 'contributions': 100 - i * 2} for i in range(30)]
+        stats = AnalyticsEngine.calculate_contributor_statistics(contributors_30)
+
+        # Must record analyzed sample size accurately
+        self.assertEqual(stats['total_recorded'], 30)
+        self.assertGreater(stats['hhi'], 0)
+        # Verify coverage dictionary ceiling metadata
+        service = AnalysisService()
+        cov = service._build_coverage_payload('90d', commits_count=100, issues_count=50, prs_count=20, contribs_count=30, languages_count=3)
+        self.assertEqual(cov['contributors_analyzed'], 30)
+        self.assertEqual(cov['sample_limits']['contributors'], 30)
+
+    def test_case_6_commit_sample_transparency(self):
+        """
+        CASE 6: 100 commits are fetched. UI / data coverage must not claim
+        '100 total commits in the year' unless verified; it must report analyzed sample limit.
+        """
+        now = datetime.now(timezone.utc)
+        commits_100 = [
+            {'sha': f'c_{i}', 'date': (now - timedelta(days=i * 3)).isoformat(), 'message': f'msg {i}', 'author': 'dev'}
+            for i in range(100)
+        ]
+        stats = AnalyticsEngine.calculate_commit_statistics(commits_100, window_days=365)
+        self.assertEqual(stats['total_analyzed'], 100)
+
+        service = AnalysisService()
+        cov = service._build_coverage_payload('365d', commits_count=100, issues_count=10, prs_count=5, contribs_count=10, languages_count=2)
+        self.assertEqual(cov['commits_analyzed'], 100)
+        self.assertEqual(cov['sample_limits']['commits'], 100)
+        self.assertEqual(cov['analysis_window'], '365d')
+

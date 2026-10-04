@@ -4,7 +4,12 @@ from .github_service import (
     GitHubAPIError,
     GitHubInvalidRepoError,
     GitHubRepoNotFoundError,
+    GitHubAuthenticationError,
+    GitHubForbiddenError,
     GitHubRateLimitExceededError,
+    GitHubRateLimitError,
+    GitHubTimeoutError,
+    GitHubNetworkError,
 )
 
 __all__ = [
@@ -12,5 +17,10 @@ __all__ = [
     'GitHubAPIError',
     'GitHubInvalidRepoError',
     'GitHubRepoNotFoundError',
+    'GitHubAuthenticationError',
+    'GitHubForbiddenError',
     'GitHubRateLimitExceededError',
+    'GitHubRateLimitError',
+    'GitHubTimeoutError',
+    'GitHubNetworkError',
 ]

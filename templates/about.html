@@ -142,6 +142,60 @@ Analysis Service (Orchestration & Caching Layer)
                     </div>
                 </div>
 
+                <!-- GitHub API Architecture & Rate-Limit Resilience -->
+                <div class="card border shadow-xs p-4 mb-4">
+                    <h2 class="h5 fw-bold text-dark mb-3 d-flex align-items-center gap-2">
+                        <i class="bi bi-shield-lock text-primary"></i>
+                        GitHub API Authentication & Rate-Limit Resilience
+                    </h2>
+                    <p class="text-secondary small mb-3">
+                        OpenSourceLens implements an enterprise-grade GitHub API client architecture designed for strict security, rate-limit awareness, and zero-data-loss resilience:
+                    </p>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <div class="p-3 border rounded-2 bg-light h-100">
+                                <h3 class="h6 fw-bold text-dark mb-1 d-flex align-items-center gap-2">
+                                    <i class="bi bi-key text-success"></i> Centralized Authentication
+                                </h3>
+                                <p class="text-secondary extra-small mb-2">
+                                    All external requests pass through a centralized <code>GitHubService</code> singleton using <code>application/vnd.github+json</code> and GitHub API version <code>2022-11-28</code>.
+                                </p>
+                                <ul class="extra-small text-secondary ps-3 mb-0">
+                                    <li><strong>Authenticated Tier:</strong> 5,000 requests/hour via Personal Access Token (PAT).</li>
+                                    <li><strong>Unauthenticated Tier:</strong> 60 requests/hour shared across local IP.</li>
+                                    <li><strong>Zero Token Leakage:</strong> Secrets are strictly read from <code>.env</code> and never logged, rendered in HTML/JSON, or committed to Git.</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="p-3 border rounded-2 bg-light h-100">
+                                <h3 class="h6 fw-bold text-dark mb-1 d-flex align-items-center gap-2">
+                                    <i class="bi bi-database-check text-primary"></i> Snapshot-Aware Fallback
+                                </h3>
+                                <p class="text-secondary extra-small mb-2">
+                                    If live GitHub requests are rate-limited or interrupted by network timeouts, OpenSourceLens automatically falls back to the most recent stored snapshot:
+                                </p>
+                                <ul class="extra-small text-secondary ps-3 mb-0">
+                                    <li><strong>Non-Destructive:</strong> Failed live fetches never overwrite or erase valid stored snapshots.</li>
+                                    <li><strong>Clear Warning Banner:</strong> Telemetry dashboards inform users when displaying stored snapshots due to active rate limits.</li>
+                                    <li><strong>Exact Reset Telemetry:</strong> Displays UTC reset timestamps and countdowns derived directly from GitHub response headers.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-3 bg-light rounded-3 font-monospace extra-small text-dark border">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="fw-bold">CLI Health Check Command:</span>
+                            <span class="badge bg-white text-dark border">Built-in Diagnostic</span>
+                        </div>
+                        <code>python manage.py check_github_api</code>
+                        <div class="text-muted mt-1">Safely validates token status, remaining quota, reset time, and API connectivity without exposing credentials.</div>
+                    </div>
+                </div>
+
                 <!-- Important Limitations & Privacy (Section 50 & 51) -->
                 <div class="card border shadow-xs p-4 mb-4">
                     <h2 class="h5 fw-bold text-dark mb-3 d-flex align-items-center gap-2">

@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}GitHub API Rate Limit Reached — OpenSourceLens{% endblock %}
+
+{% block content %}
+<div class="container-xl py-5">
+    <div class="py-4" style="max-width: 680px; margin: 0 auto;">
+        
+        <!-- Rate Limit Alert Card -->
+        <div class="card border shadow-sm p-4 mb-4 bg-white">
+            <div class="d-flex align-items-start gap-3">
+                <div class="p-3 bg-warning-subtle text-warning-emphasis rounded-3 border border-warning-subtle">
+                    <i class="bi bi-speedometer2 fs-2 text-warning-emphasis"></i>
+                </div>
+                <div class="flex-grow-1">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle font-monospace px-2 py-1 extra-small">
+                            HTTP 429 · Rate Limit Exceeded
+                        </span>
+                        {% if rate_limit_info.is_authenticated %}
+                            <span class="badge bg-success-subtle text-success border border-success-subtle extra-small">
+                                <i class="bi bi-shield-check me-1"></i>Token Authenticated
+                            </span>
+                        {% else %}
+                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle extra-small">
+                                <i class="bi bi-shield-slash me-1"></i>Unauthenticated (60 req/hr)
+                            </span>
+                        {% endif %}
+                    </div>
+
+                    <h1 class="h4 fw-bold text-dark mb-2">GitHub API Rate Limit Reached</h1>
+                    <p class="text-secondary small mb-3">
+                        OpenSourceLens has temporarily reached GitHub's API request quota for this evaluation window. Live repository telemetry retrieval is paused until the quota resets.
+                    </p>
+
+                    <!-- Telemetry Details Box -->
+                    <div class="p-3 bg-light border rounded-2 mb-3 font-monospace small">
+                        <div class="row g-2">
+                            <div class="col-sm-6">
+                                <span class="text-muted extra-small d-block">Target Repository:</span>
+                                <strong class="text-dark">{{ repo_name|default:"Requested repository" }}</strong>
+                            </div>
+                            <div class="col-sm-6">
+                                <span class="text-muted extra-small d-block">Quota Ceiling:</span>
+                                <strong class="text-dark">{{ rate_limit_info.limit|default:"60" }} req/hr</strong>
+                            </div>
+                            <div class="col-sm-6">
+                                <span class="text-muted extra-small d-block">Quota Resets At:</span>
+                                <strong class="text-primary">{{ rate_limit_info.reset_time_str|default:"Shortly" }}</strong>
+                            </div>
+                            <div class="col-sm-6">
+                                <span class="text-muted extra-small d-block">Estimated Wait:</span>
+                                <strong class="text-dark">
+                                    {% if rate_limit_info.reset_in_minutes > 0 %}
+                                        ~{{ rate_limit_info.reset_in_minutes }} minute{{ rate_limit_info.reset_in_minutes|pluralize }}
+                                    {% else %}
+                                        Under a minute
+                                    {% endif %}
+                                </strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if not rate_limit_info.is_authenticated %}
+                        <!-- Token Setup Guidance (When Token is Missing) -->
+                        <div class="alert alert-info border border-info-subtle p-3 mb-3">
+                            <h2 class="h6 fw-bold text-dark mb-1 d-flex align-items-center gap-2">
+                                <i class="bi bi-key-fill text-info"></i>
+                                Increase Quota to 5,000 Requests / Hour
+                            </h2>
+                            <p class="extra-small text-secondary mb-2">
+                                GitHub provides 5,000 requests/hour for authenticated requests vs 60 requests/hour for unauthenticated access. Configure a personal access token to prevent limits:
+                            </p>
+                            <ol class="extra-small text-secondary mb-0 ps-3">
+                                <li>Generate a token at <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer" class="text-decoration-none fw-semibold">GitHub &rarr; Settings &rarr; Personal Access Tokens</a> (classic, <code>public_repo</code> scope).</li>
+                                <li>Add <code>GITHUB_TOKEN=your_token_here</code> to your local <code>.env</code> file.</li>
+                                <li>Restart your Django server to immediately activate 5,000 req/hr quota.</li>
+                            </ol>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-secondary border p-3 mb-3 extra-small text-secondary">
+                            <i class="bi bi-info-circle me-1 text-primary"></i>
+                            Your personal access token is configured, but the 5,000 request/hour ceiling was reached. Quota will automatically restore at <strong>{{ rate_limit_info.reset_time_str }}</strong>.
+                        </div>
+                    {% endif %}
+
+                    <!-- Actions -->
+                    <div class="d-flex flex-wrap gap-2 pt-2 border-top">
+                        <a href="{% url 'history' %}" class="btn btn-sm os-btn-primary px-3">
+                            <i class="bi bi-clock-history me-1"></i> Browse Cached History
+                        </a>
+                        {% if repo_name %}
+                            <a href="{% url 'analyze' %}?repo={{ repo_name }}&window={{ window|default:'90d' }}" class="btn btn-sm os-btn-secondary px-3">
+                                <i class="bi bi-arrow-clockwise me-1"></i> Retry Analysis
+                            </a>
+                        {% endif %}
+                        <a href="{% url 'home' %}" class="btn btn-sm os-btn-secondary px-3">
+                            <i class="bi bi-house me-1"></i> Return Home
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Preserved Snapshots Prompt -->
+        {% if stored_repos %}
+        <div class="card border shadow-xs p-3 bg-white">
+            <h3 class="h6 fw-bold text-dark mb-2 d-flex align-items-center gap-2">
+                <i class="bi bi-database-check text-success"></i>
+                Locally Available Repositories (No GitHub API Quota Required)
+            </h3>
+            <p class="extra-small text-secondary mb-3">
+                These repositories are already cached with complete analytical snapshots and can be viewed immediately:
+            </p>
+            <div class="d-flex flex-wrap gap-2">
+                {% for r in stored_repos %}
+                <a href="{% url 'analyze' %}?repo={{ r.full_name }}" class="btn btn-sm os-btn-pill">
+                    {{ r.full_name }}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endblock %}

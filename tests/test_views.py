@@ -262,9 +262,9 @@ class ViewIntegrationTests(TestCase):
         mock_repo.side_effect = GitHubRateLimitError("GitHub API rate limit exceeded.", reset_timestamp=1791234567)
 
         response = self.client.post(reverse('analyze'), {'repository': 'facebook/react'}, follow=True)
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, 'home.html')
-        self.assertContains(response, 'rate limit')
+        self.assertEqual(response.status_code, 429)
+        self.assertTemplateUsed(response, 'rate_limit.html')
+        self.assertContains(response, 'Rate Limit', status_code=429)
 
     @patch('dashboard.services.github_service.GitHubService.get_repository')
     def test_analyze_view_timeout_error_handling(self, mock_repo):

@@ -29,6 +29,10 @@ from dashboard.services.github_service import (
     GitHubInvalidRepoError,
     GitHubRepoNotFoundError,
     GitHubRateLimitExceededError,
+    GitHubAuthenticationError,
+    GitHubForbiddenError,
+    GitHubTimeoutError,
+    GitHubNetworkError,
 )
 from dashboard.analytics.analytics_engine import AnalyticsEngine, format_metric_number
 
@@ -105,12 +109,37 @@ class AnalysisService:
 
         # Step 1: Fetch fresh data from GitHub REST API
         logger.info(f"Ingesting fresh data from GitHub for {full_name} (Window: {window})")
-        repo_data = self.github_service.get_repository(owner, repo_name)
-        languages_raw = self.github_service.get_languages(owner, repo_name)
-        contributors_raw = self.github_service.get_contributors(owner, repo_name, limit=30)
-        commits_raw = self.github_service.get_commits(owner, repo_name, limit=100, since=cutoff_iso)
-        issues_raw = self.github_service.get_issues(owner, repo_name, limit=100, since=cutoff_iso)
-        prs_raw = self.github_service.get_pull_requests(owner, repo_name, limit=100, since=cutoff_iso)
+        try:
+            repo_data = self.github_service.get_repository(owner, repo_name)
+            languages_raw = self.github_service.get_languages(owner, repo_name)
+            contributors_raw = self.github_service.get_contributors(owner, repo_name, limit=30)
+            commits_raw = self.github_service.get_commits(owner, repo_name, limit=100, since=cutoff_iso)
+            issues_raw = self.github_service.get_issues(owner, repo_name, limit=100, since=cutoff_iso)
+            prs_raw = self.github_service.get_pull_requests(owner, repo_name, limit=100, since=cutoff_iso)
+        except (GitHubRateLimitExceededError, GitHubTimeoutError, GitHubAPIError) as e:
+            # If live GitHub API fetch fails, preserve data trust: check if we have a valid stored snapshot
+            if db_repo and db_repo.analyses.filter(analysis_window=window).exists():
+                logger.warning(
+                    f"Live fetch failed for {full_name} ({type(e).__name__}: {e}). "
+                    f"Preserving data trust: Falling back to latest stored snapshot for window '{window}'."
+                )
+                fallback_payload = self._build_dashboard_context_from_db(db_repo, window, window_label)
+                fallback_payload['live_fetch_failed'] = True
+                fallback_payload['live_fetch_error'] = str(e)
+                fallback_payload['is_rate_limited'] = isinstance(e, GitHubRateLimitExceededError)
+                if isinstance(e, GitHubRateLimitExceededError):
+                    fallback_payload['rate_limit_info'] = {
+                        'message': str(e),
+                        'limit': getattr(e, 'limit', 5000),
+                        'remaining': getattr(e, 'remaining', 0),
+                        'reset_timestamp': e.reset_timestamp,
+                        'reset_time_str': getattr(e, 'reset_time_str', 'Shortly'),
+                        'reset_in_minutes': getattr(e, 'reset_in_minutes', 0),
+                        'is_authenticated': getattr(e, 'is_authenticated', bool(self.github_service.token)),
+                    }
+                return fallback_payload
+            # If no stored snapshot exists for this repository and window, propagate the exception
+            raise
 
         # Step 2: Run Pandas Analytics & Health Scoring
         language_stats = AnalyticsEngine.calculate_language_statistics(languages_raw)
@@ -135,11 +164,22 @@ class AnalysisService:
 
         coverage_summary = {
             'window': window,
+            'analysis_window': window,
             'window_label': window_label,
             'commits_analyzed': commit_stats['total_analyzed'],
             'issues_analyzed': issue_stats['total_analyzed'],
             'prs_analyzed': pr_stats['total_analyzed'],
             'contributors_recorded': contributor_stats['total_recorded'],
+            'contributors_analyzed': contributor_stats['total_recorded'],
+            'sample_limits': {
+                'commits': 100,
+                'issues': 100,
+                'prs': 100,
+                'contributors': 30,
+            },
+            'github_api_authenticated': bool(self.github_service.token),
+            'github_api_limit': 5000 if self.github_service.token else 60,
+            'source': 'GitHub REST API',
             'generated_at': datetime.now(timezone.utc).isoformat(),
         }
 
@@ -540,16 +580,16 @@ class AnalysisService:
             contrib_stats=contributor_stats,
         )
 
-        coverage_summary = {
-            'window': window,
-            'window_label': window_label,
-            'commits_analyzed': commit_stats['total_analyzed'],
-            'issues_analyzed': issue_stats['total_analyzed'],
-            'prs_analyzed': pr_stats['total_analyzed'],
-            'contributors_recorded': contributor_stats['total_recorded'],
-            'generated_at': repo_obj.fetched_at.isoformat() if repo_obj.fetched_at else '',
-            'reused_from_cache': True,
-        }
+        coverage_summary = self._build_coverage_payload(
+            window=window,
+            commits_count=commit_stats['total_analyzed'],
+            issues_count=issue_stats['total_analyzed'],
+            prs_count=pr_stats['total_analyzed'],
+            contribs_count=contributor_stats['total_recorded'],
+            window_label=window_label,
+            generated_at=repo_obj.fetched_at.isoformat() if repo_obj.fetched_at else '',
+            reused_from_cache=True,
+        )
 
         health_trend = AnalyticsEngine.calculate_historical_trend(repo_obj.analyses.order_by('analyzed_at'))
 
@@ -570,6 +610,48 @@ class AnalysisService:
             issues_raw=issues_raw,
             prs_raw=prs_raw,
         )
+
+    def _build_coverage_payload(
+        self,
+        window: str,
+        commits_count: int,
+        issues_count: int,
+        prs_count: int,
+        contribs_count: int,
+        languages_count: int = 0,
+        window_label: Optional[str] = None,
+        generated_at: Optional[str] = None,
+        reused_from_cache: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Builds a comprehensive data provenance and telemetry coverage dictionary
+        exposing analyzed sample counts, limits, source, and window identifiers.
+        """
+        if not window_label:
+            _, window_label = self._get_window_cutoff(window)
+        return {
+            'window': window,
+            'analysis_window': window,
+            'window_label': window_label,
+            'commits_analyzed': commits_count,
+            'issues_analyzed': issues_count,
+            'prs_analyzed': prs_count,
+            'contributors_recorded': contribs_count,
+            'contributors_analyzed': contribs_count,
+            'languages_analyzed': languages_count,
+            'sample_limits': {
+                'commits': 100,
+                'issues': 100,
+                'prs': 100,
+                'contributors': 30,
+            },
+            'github_api_authenticated': bool(self.github_service.token),
+            'github_api_limit': 5000 if self.github_service.token else 60,
+            'source': 'GitHub REST API',
+            'generated_at': generated_at or datetime.now(timezone.utc).isoformat(),
+            'reused_from_cache': reused_from_cache,
+            'completeness_status': 'Complete' if commits_count > 0 else 'Partial',
+        }
 
     def _assemble_dashboard_payload(
         self,

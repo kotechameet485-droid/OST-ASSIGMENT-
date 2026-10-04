@@ -394,3 +394,57 @@ body.os-app-body {
         font-size: 1.4rem;
     }
 }
+
+/* Sticky Section Navigation (Phase 20) */
+.os-sticky-subnav {
+    position: sticky;
+    top: 56px;
+    z-index: 1010;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--os-border);
+    transition: all 0.2s ease;
+}
+
+.os-subnav-link {
+    color: var(--os-text-secondary);
+    font-size: 0.82rem;
+    font-weight: 500;
+    padding: 0.35rem 0.75rem;
+    border-radius: var(--os-radius-sm);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+}
+
+.os-subnav-link:hover,
+.os-subnav-link:focus-visible {
+    color: var(--os-primary);
+    background-color: var(--os-primary-light);
+}
+
+.os-subnav-link.active {
+    color: var(--os-primary);
+    background-color: var(--os-primary-light);
+    font-weight: 600;
+}
+
+/* Accessibility & Keyboard Navigation (Phase 20) */
+:focus-visible {
+    outline: 2px solid var(--os-primary);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, ::before, ::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+    .spin {
+        animation: none !important;
+    }
+}

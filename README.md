@@ -7,7 +7,7 @@
 [![Pandas](https://img.shields.io/badge/Pandas-2.2+-150458?style=flat&logo=pandas&logoColor=white)](https://pandas.pydata.org/)
 [![Chart.js](https://img.shields.io/badge/Chart.js-4.4-FF6384?style=flat&logo=chartdotjs&logoColor=white)](https://www.chartjs.org/)
 [![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3-7952B3?style=flat&logo=bootstrap&logoColor=white)](https://getbootstrap.com/)
-[![Tests](https://img.shields.io/badge/Tests-72%20Passed-success?style=flat&logo=pytest&logoColor=white)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-94%20Passed-success?style=flat&logo=pytest&logoColor=white)](#testing)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **OpenSourceLens** is a production-grade open-source project intelligence and health analytics platform built as part of the **Open Source Technologies (OST)** engineering curriculum. It transforms raw telemetry from the public GitHub REST API into actionable engineering metrics, evaluating repository activity, triage responsiveness, code integration, maintainer diversity, and hygiene through a transparent, reproducible, multi-signal methodology.
@@ -29,6 +29,7 @@
 - [Data Coverage](#data-coverage)
 - [Installation](#installation)
 - [Environment Variables](#environment-variables)
+- [GitHub API Configuration](#github-api-configuration)
 - [PostgreSQL Setup](#postgresql-setup)
 - [Running the Project](#running-the-project)
 - [Testing](#testing)
@@ -421,6 +422,63 @@ GITHUB_API_TIMEOUT=12
 
 ---
 
+## GitHub API Configuration
+
+OpenSourceLens interacts directly with the public GitHub REST API (`https://api.github.com/`) to retrieve repository metadata, commits, issues, pull requests, languages, and contributor metrics.
+
+### 1. Generating a GitHub Personal Access Token (PAT)
+To elevate your API rate ceiling from the unauthenticated limit (60 req/hr) to the authenticated limit (**5,000 req/hr**):
+1. Sign in to your GitHub account and navigate to **Settings** $\to$ **Developer Settings** $\to$ **Personal access tokens** $\to$ **Tokens (classic)** (or visit `https://github.com/settings/tokens`).
+2. Click **Generate new token (classic)**.
+3. Provide a descriptive note (e.g. `OpenSourceLens-OST-Analytics`).
+4. Select the **`public_repo`** scope (Read-only access to public repositories).
+5. Click **Generate token** and copy the resulting string (`ghp_...` or `github_pat_...`).
+
+### 2. Configuring the Token in `.env`
+Open your local `.env` file (which is gitignored and never committed) and set:
+```env
+GITHUB_TOKEN=your_personal_access_token_here
+```
+> **Security Notice:** Never commit `.env` or hardcode tokens in codebase files, templates, or tests. OpenSourceLens enforces server-side token isolation and strips credentials from all logging output.
+
+### 3. Rate Limit Tiers & Graceful Resilience
+| Metric | Unauthenticated Access | Authenticated Access (`GITHUB_TOKEN`) |
+| :--- | :---: | :---: |
+| **Request Ceiling** | 60 requests / hour | 5,000 requests / hour |
+| **Identifier** | Client Public IP Address | User Account PAT |
+| **Header** | None | `Authorization: Bearer <TOKEN>` |
+| **API Version** | `2022-11-28` | `2022-11-28` |
+
+#### How OpenSourceLens Handles Rate Limits:
+- **Snapshot-Aware Fallback (Non-Destructive):** If a live GitHub refresh hits a rate limit or network timeout, OpenSourceLens **never overwrites or deletes** your valid database records. Instead, it seamlessly serves the most recent stored snapshot along with a prominent warning banner explaining that live telemetry is temporarily paused.
+- **Dedicated HTTP 429 Recovery Screen:** If an uncached repository is requested while the rate limit is exhausted, OpenSourceLens returns HTTP 429 with a dedicated rate-limit recovery template (`rate_limit.html`) featuring the exact UTC reset timestamp, remaining time countdown, token configuration instructions (if unauthenticated), and quick links to existing stored snapshots.
+- **Error Differentiation:** The application strictly distinguishes between:
+  - `401 Unauthorized`: Invalid or expired PAT (`errors/401.html`).
+  - `403 Forbidden`: Private or restricted repository (`errors/403.html`).
+  - `403/429 Rate Limit`: Quota reached (`rate_limit.html`).
+  - `404 Not Found`: Repository does not exist on GitHub.
+  - `5xx / Network`: Transient errors retried up to 2 times with exponential backoff (rate limits are never retried repeatedly).
+
+### 4. Running the GitHub API Diagnostic Command
+Verify your token status, quota ceiling, remaining requests, and reset time directly from the CLI without exposing secrets:
+```bash
+python manage.py check_github_api
+```
+**Sample Output:**
+```text
+=== OpenSourceLens — GitHub API Diagnostic ===
+Token Configured:    YES
+Authentication:      AUTHENTICATED (Bearer token active)
+Quota Ceiling:       5,000 requests / hour
+Requests Remaining:  5,000 / 5,000
+Quota Reset Time:    14:37:54 UTC (in 59 minutes)
+
+[OK] GitHub API connection is healthy and operational.
+==================================================
+```
+
+---
+
 ## PostgreSQL Setup
 
 ### 1. Create PostgreSQL Database
@@ -476,14 +534,14 @@ python manage.py test
 - **`tests/test_models.py` (9 tests):** Database relationships, cascading deletes, unique constraints, and atomic transaction rollback.
 - **`tests/test_analytics.py` (17 tests):** Pandas time-series grouping, outlier-resilient median close times, HHI concentration calculations, and zero-division edge cases.
 - **`tests/test_views.py` (18 tests):** View lifecycles, caching verification, force refresh (`?refresh=true`), configurable window parameters (`30d`, `90d`, `180d`, `365d`), error redirects, and edge-case repositories (0 issues, 0 PRs, single contributor, archived, and forked repos).
-- **`tests/test_hardening.py` (9 tests):** Window & cache isolation (30d vs 90d), immutable historical snapshots, stale entity synchronization pruning, pull request window cutoff filtering, zero synthetic comparison fallback verification, active-day vs calendar-day commit averages, CSRF protection on POST refresh, and `.env` version control isolation.
+- **`tests/test_hardening.py` (14 tests):** Window & cache isolation (30d vs 90d vs 365d), immutable historical snapshots, stale entity synchronization pruning, pull request window cutoff filtering, zero synthetic comparison fallback verification, active-day vs calendar-day commit averages, CSRF protection on POST refresh, `.env` version control isolation, and Phase 25 Cases 1–6 data-integrity assertions.
 
 ```text
-Found 72 test(s).
+Found 77 test(s).
 System check identified no issues (0 silenced).
-........................................................................
+.............................................................................
 ----------------------------------------------------------------------
-Ran 72 tests in 5.157s
+Ran 77 tests in 4.988s
 
 OK
 ```

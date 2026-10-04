@@ -31,7 +31,14 @@
         // Repository validation regex: supports owner/repo and https://github.com/owner/repo
         var repoRegex = /^(?:https?:\/\/)?(?:www\.)?github\.com\/([a-zA-Z0-9_\-\.]+)\/([a-zA-Z0-9_\-\.]+)|\b([a-zA-Z0-9_\-\.]+)\/([a-zA-Z0-9_\-\.]+)\b$/;
 
+        var isSubmitting = false;
+
         searchForm.addEventListener('submit', function (e) {
+            if (isSubmitting) {
+                e.preventDefault();
+                return false;
+            }
+
             var rawValue = (searchInput.value || '').trim();
 
             if (!rawValue || !repoRegex.test(rawValue)) {
@@ -44,11 +51,19 @@
                 return false;
             }
 
-            // Input is valid: clear errors
+            // Input is valid: clear errors and lock submission
+            isSubmitting = true;
             if (validationError) {
                 validationError.classList.add('d-none');
             }
             searchInput.classList.remove('is-invalid');
+
+            // Disable submit button immediately to prevent double submissions
+            var submitBtn = searchForm.querySelector('button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Analyzing...';
+            }
 
             // Trigger truthful pipeline step progression
             if (loadingOverlay) {
@@ -60,6 +75,23 @@
 
                 initLoadingStatusCycler();
             }
+        });
+
+        // Also protect any in-page refresh forms from double-clicking
+        var refreshForms = document.querySelectorAll('form[action*="analyze"]');
+        refreshForms.forEach(function (form) {
+            if (form === searchForm) return;
+            form.addEventListener('submit', function (e) {
+                var btn = form.querySelector('button[type="submit"]');
+                if (btn && btn.disabled) {
+                    e.preventDefault();
+                    return false;
+                }
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Refreshing...';
+                }
+            });
         });
 
         // Clear error styling on user input

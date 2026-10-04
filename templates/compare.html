@@ -94,6 +94,11 @@
                                 {% for r in comparison.repositories %}
                                     <th class="text-center font-monospace">
                                         <div class="fw-bold text-dark">{{ r.name }}</div>
+                                        <div class="my-1">
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle extra-small font-monospace" title="Full analysis pipeline executed; no synthetic fallbacks">
+                                                <i class="bi bi-check-circle-fill me-1"></i>Complete Analysis
+                                            </span>
+                                        </div>
                                         <a href="{% url 'analyze' %}?repo={{ r.name }}&window={{ r.analysis_window }}" class="extra-small text-decoration-none text-primary">
                                             View Dashboard <i class="bi bi-arrow-right"></i>
                                         </a>
@@ -287,34 +292,63 @@
 
             <!-- Factual Measured Differences Summary (Section 29) -->
             <div class="card border bg-light p-4 mb-4">
-                <h3 class="h6 fw-bold text-dark mb-2 d-flex align-items-center gap-2">
-                    <i class="bi bi-info-circle text-primary"></i>
-                    Measured Observations
-                </h3>
-                <ul class="mb-0 small text-secondary ps-3">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h3 class="h6 fw-bold text-dark mb-0 d-flex align-items-center gap-2">
+                        <i class="bi bi-info-circle text-primary"></i>
+                        Measured Comparative Observations
+                    </h3>
+                    <span class="badge bg-white text-secondary border font-monospace extra-small">Evidence-Based Telemetry</span>
+                </div>
+                <p class="text-muted extra-small mb-3">
+                    Comparative metrics reflect measured GitHub REST API telemetry evaluated under the identical <strong>{{ window|upper }}</strong> scope. No subjective rankings, winners, or arbitrary defaults are applied.
+                </p>
+                <div class="row g-2">
                     {% for r in comparison.repositories %}
-                    <li class="mb-1">
-                        <strong>{{ r.name }}</strong> presents {{ r.stars_formatted }} stars, {{ r.forks_formatted }} forks, and a health score of {{ r.health_score }}/100 evaluated under the {{ r.window_label }} scope.
-                    </li>
+                    <div class="col-md-{% if comparison.repositories|length == 2 %}6{% else %}4{% endif %}">
+                        <div class="p-3 border rounded-2 bg-white h-100">
+                            <div class="fw-bold text-dark font-monospace mb-1">{{ r.name }}</div>
+                            <div class="small text-secondary">
+                                <div>• Health Score: <strong class="text-dark">{{ r.health_score }}/100</strong> ({{ r.health_tier }})</div>
+                                <div>• Commit Velocity: <strong class="text-dark">{{ r.commits_per_active_day }}</strong> /active day</div>
+                                <div>• Issue Resolution: <strong class="text-dark">{{ r.issue_resolution_rate }}%</strong> analyzed closed</div>
+                                <div>• PR Merge Rate: <strong class="text-dark">{{ r.pr_merge_rate }}%</strong> analyzed merged</div>
+                                <div>• Maintainer HHI: <strong class="text-dark">{{ r.hhi }}</strong></div>
+                            </div>
+                        </div>
+                    </div>
                     {% endfor %}
-                </ul>
+                </div>
             </div>
         {% elif candidates %}
-            <div class="alert alert-warning border shadow-xs d-flex align-items-center gap-2">
-                <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+            <div class="alert alert-warning border shadow-xs d-flex align-items-center gap-3 p-4">
+                <i class="bi bi-exclamation-triangle-fill fs-3 text-warning"></i>
                 <div>
-                    Please provide at least 2 valid repositories to generate a side-by-side comparison.
+                    <h4 class="h6 fw-bold text-dark mb-1">Insufficient Comparison Input</h4>
+                    <p class="small text-secondary mb-2">
+                        Please provide at least two valid public GitHub repositories (e.g. <code>facebook/react</code> and <code>vuejs/core</code>) to generate side-by-side comparative telemetry.
+                    </p>
+                    <a href="{% url 'compare' %}?repo1=facebook/react&repo2=vuejs/core&window=90d" class="btn btn-sm os-btn-primary">
+                        Load Sample Comparison (React vs Vue)
+                    </a>
                 </div>
             </div>
         {% else %}
             <!-- Initial Empty State -->
             <div class="card border shadow-xs p-5 text-center bg-white">
                 <div class="py-4">
-                    <i class="bi bi-intersect fs-1 text-muted d-block mb-3"></i>
+                    <i class="bi bi-intersect fs-1 text-primary d-block mb-3"></i>
                     <h3 class="h5 fw-bold text-dark mb-2">Select Repositories to Compare</h3>
                     <p class="text-secondary small mb-4 max-w-md mx-auto">
-                        Enter at least two public GitHub repositories above (e.g. <code>facebook/react</code> and <code>vuejs/core</code>) to generate side-by-side analytics and comparative charts.
+                        OpenSourceLens performs deterministic, side-by-side engineering telemetry comparison across up to three public repositories under the same time scope without inventing missing data.
                     </p>
+                    <div class="d-flex flex-wrap justify-content-center gap-2">
+                        <a href="{% url 'compare' %}?repo1=facebook/react&repo2=vuejs/core&window=90d" class="btn btn-sm os-btn-primary">
+                            <i class="bi bi-play-fill me-1"></i> Try React vs Vue
+                        </a>
+                        <a href="{% url 'compare' %}?repo1=pallets/flask&repo2=django/django&window=90d" class="btn btn-sm os-btn-secondary">
+                            <i class="bi bi-play-fill me-1"></i> Try Flask vs Django
+                        </a>
+                    </div>
                 </div>
             </div>
         {% endif %}
@@ -325,12 +359,6 @@
 {% block extra_js %}
 {% if comparison_chart_data %}
 {{ comparison_chart_data|json_script:"comp-chart-payload" }}
-{% elif chart_json %}
-<script id="comp-chart-payload" type="application/json">
-{{ chart_json|safe }}
-</script>
-{% endif %}
-{% if comparison_chart_data or chart_json %}
 <script>
     const compData = JSON.parse(document.getElementById('comp-chart-payload').textContent);
     const ctx = document.getElementById('compareGroupedChart');

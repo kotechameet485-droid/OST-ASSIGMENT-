@@ -41,8 +41,43 @@
             </div>
         </div>
 
+        <!-- Live Fetch Fallback / Rate Limit Alert Banner -->
+        {% if live_fetch_failed %}
+        <div class="alert alert-warning border border-warning-subtle shadow-xs mb-4 p-3 d-flex align-items-center gap-3">
+            <div class="p-2 bg-warning-subtle rounded-2 text-warning-emphasis">
+                <i class="bi bi-shield-exclamation fs-3"></i>
+            </div>
+            <div class="flex-grow-1">
+                <div class="fw-bold text-dark d-flex align-items-center gap-2">
+                    <span>Live GitHub Refresh Paused</span>
+                    {% if is_rate_limited %}
+                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle extra-small font-monospace">Rate Limit Active</span>
+                    {% else %}
+                        <span class="badge bg-secondary-subtle text-secondary border extra-small font-monospace">Connection Offline</span>
+                    {% endif %}
+                </div>
+                <div class="small text-secondary mt-1">
+                    {% if is_rate_limited %}
+                        GitHub API request limit reached{% if rate_limit_info.reset_time_str %} (quota restores at <strong>{{ rate_limit_info.reset_time_str }}</strong>){% endif %}.
+                        OpenSourceLens is displaying the <strong>latest preserved snapshot</strong> computed on {{ analyzed_at|date:"M d, Y H:i UTC" }}.
+                        All metrics, historical trends, and scores remain fully reproducible and verified.
+                    {% else %}
+                        Live GitHub connection was temporarily interrupted. Displaying the most recent stored analytical snapshot.
+                    {% endif %}
+                </div>
+            </div>
+            {% if rate_limit_info.reset_time_str %}
+            <div class="text-end d-none d-md-block">
+                <span class="badge bg-light text-dark border font-monospace extra-small px-2 py-1">
+                    <i class="bi bi-clock me-1 text-primary"></i>Resets: {{ rate_limit_info.reset_time_str }}
+                </span>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
         <!-- LEVEL 1: REPOSITORY HEADER CARD (Section 30 & 31) -->
-        <div class="card os-repo-header-card border shadow-sm p-4 mb-4">
+        <div id="sec-overview" class="card os-repo-header-card border shadow-sm p-4 mb-4">
             <div class="row align-items-center gy-3">
                 <div class="col-lg-7">
                     <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
@@ -88,49 +123,66 @@
                 <div class="col-lg-5">
                     <div class="row g-2">
                         <div class="col-sm-6">
-                            <div class="border rounded-3 p-3 bg-white shadow-xs h-100">
-                                <div class="d-flex align-items-center justify-content-between mb-1">
-                                    <span class="text-muted extra-small fw-semibold text-uppercase tracking-wider">Health Score</span>
-                                    <span class="badge bg-{{ health.tier_badge }}-subtle text-{{ health.tier_badge }} border border-{{ health.tier_badge }}-subtle">
-                                        {{ health.health_tier }}
-                                    </span>
+                            <div class="border rounded-3 p-3 bg-white shadow-xs h-100 d-flex flex-column justify-content-between">
+                                <div>
+                                    <div class="d-flex align-items-center justify-content-between mb-1">
+                                        <span class="text-muted extra-small fw-semibold text-uppercase tracking-wider">Health Score</span>
+                                        <span class="badge bg-{{ health.tier_badge }}-subtle text-{{ health.tier_badge }} border border-{{ health.tier_badge }}-subtle" title="Application-defined analytical classification">
+                                            {% if health.health_tier == 'Excellent' %}✓{% elif health.health_tier == 'Good' %}ℹ{% elif health.health_tier == 'Moderate' %}⚠{% else %}!{% endif %} {{ health.health_tier }}
+                                        </span>
+                                    </div>
+                                    <div class="d-flex align-items-baseline gap-2">
+                                        <span class="display-6 fw-bold text-dark font-monospace">{{ health.total_score }}</span>
+                                        <span class="text-muted fs-6">/ 100</span>
+                                    </div>
+                                    <div class="progress mt-2" style="height: 6px;">
+                                        <div class="progress-bar bg-{{ health.tier_badge }}" role="progressbar" style="width: {{ health.total_score }}%;" aria-valuenow="{{ health.total_score }}" aria-valuemin="0" aria-valuemax="100"></div>
+                                    </div>
                                 </div>
-                                <div class="d-flex align-items-baseline gap-2">
-                                    <span class="display-6 fw-bold text-dark font-monospace">{{ health.total_score }}</span>
-                                    <span class="text-muted fs-6">/ 100</span>
-                                </div>
-                                <div class="progress mt-2" style="height: 6px;">
-                                    <div class="progress-bar bg-{{ health.tier_badge }}" role="progressbar" style="width: {{ health.total_score }}%;" aria-valuenow="{{ health.total_score }}" aria-valuemin="0" aria-valuemax="100"></div>
-                                </div>
-                                <div class="text-muted extra-small mt-2">
-                                    5-Pillar Maintainability
+                                <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top extra-small">
+                                    <span class="text-muted">5-Pillar Maintainability</span>
+                                    <button type="button" class="btn btn-link p-0 text-primary extra-small text-decoration-none fw-semibold" data-bs-toggle="modal" data-bs-target="#scoreBreakdownModal">
+                                        Why this score? <i class="bi bi-chevron-right"></i>
+                                    </button>
                                 </div>
                             </div>
                         </div>
                         <div class="col-sm-6">
                             <!-- Prominent Coverage Card -->
-                            <div class="border rounded-3 p-3 bg-white shadow-xs h-100">
-                                <div class="d-flex align-items-center justify-content-between mb-1">
-                                    <span class="text-primary extra-small fw-bold text-uppercase tracking-wider">Analysis Coverage</span>
-                                    <span class="badge bg-light text-dark border font-monospace extra-small">{{ coverage.window_label }}</span>
+                            <div class="border rounded-3 p-3 bg-white shadow-xs h-100 d-flex flex-column justify-content-between">
+                                <div>
+                                    <div class="d-flex align-items-center justify-content-between mb-1">
+                                        <span class="text-primary extra-small fw-bold text-uppercase tracking-wider">
+                                            <i class="bi bi-shield-check me-1"></i>Analysis Coverage
+                                        </span>
+                                        <span class="badge bg-light text-dark border font-monospace extra-small">{{ coverage.window_label }}</span>
+                                    </div>
+                                    <div class="extra-small font-monospace text-secondary mt-1">
+                                        <div class="d-flex justify-content-between py-1 border-bottom">
+                                             <span class="text-muted">Commits:</span>
+                                            <strong class="text-dark">{{ coverage.commits_analyzed }} <span class="text-muted fw-normal">(max 100)</span></strong>
+                                        </div>
+                                        <div class="d-flex justify-content-between py-1 border-bottom">
+                                            <span class="text-muted">Issues:</span>
+                                            <strong class="text-dark">{{ coverage.issues_analyzed }} <span class="text-muted fw-normal">(max 100)</span></strong>
+                                        </div>
+                                        <div class="d-flex justify-content-between py-1 border-bottom">
+                                            <span class="text-muted">Pull Requests:</span>
+                                            <strong class="text-dark">{{ coverage.prs_analyzed }} <span class="text-muted fw-normal">(max 100)</span></strong>
+                                        </div>
+                                        <div class="d-flex justify-content-between py-1">
+                                            <span class="text-muted">Contributors:</span>
+                                            <strong class="text-dark">{{ coverage.contributors_recorded }} <span class="text-muted fw-normal">(top 30)</span></strong>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="extra-small font-monospace text-secondary mt-1">
-                                    <div class="d-flex justify-content-between py-1 border-bottom">
-                                        <span>Commits:</span>
-                                        <strong class="text-dark">{{ coverage.commits_analyzed }} analyzed</strong>
-                                    </div>
-                                    <div class="d-flex justify-content-between py-1 border-bottom">
-                                        <span>Issues:</span>
-                                        <strong class="text-dark">{{ coverage.issues_analyzed }} analyzed</strong>
-                                    </div>
-                                    <div class="d-flex justify-content-between py-1 border-bottom">
-                                        <span>Pull Requests:</span>
-                                        <strong class="text-dark">{{ coverage.prs_analyzed }} analyzed</strong>
-                                    </div>
-                                    <div class="d-flex justify-content-between py-1">
-                                        <span>Contributors:</span>
-                                        <strong class="text-dark">{{ coverage.contributors_recorded }} analyzed</strong>
-                                    </div>
+                                <div class="mt-2 pt-2 border-top text-muted extra-small d-flex justify-content-between align-items-center">
+                                    <span title="Fetched from GitHub REST API"><i class="bi bi-cloud-check text-success me-1"></i>GitHub API</span>
+                                    {% if coverage.github_api_authenticated %}
+                                        <span class="text-success fw-medium font-monospace" title="5,000 requests per hour limit"><i class="bi bi-shield-check me-1"></i>Auth (5k/hr)</span>
+                                    {% else %}
+                                        <span class="text-secondary font-monospace" title="60 requests per hour limit"><i class="bi bi-shield-slash me-1"></i>Unauth (60/hr)</span>
+                                    {% endif %}
                                 </div>
                             </div>
                         </div>
@@ -138,6 +190,39 @@
                 </div>
             </div>
         </div>
+
+        <!-- STICKY SECTION SUBNAVIGATION (Phase 20) -->
+        <nav class="os-sticky-subnav py-2 mb-4 rounded-3 shadow-xs" aria-label="Dashboard In-Page Navigation">
+            <div class="d-flex align-items-center justify-content-between overflow-x-auto px-3">
+                <div class="d-flex align-items-center gap-1">
+                    <a href="#sec-overview" class="os-subnav-link active">
+                        <i class="bi bi-speedometer2 me-1"></i>Overview
+                    </a>
+                    <a href="#sec-activity" class="os-subnav-link">
+                        <i class="bi bi-activity me-1"></i>Activity
+                    </a>
+                    <a href="#sec-issues-prs" class="os-subnav-link">
+                        <i class="bi bi-check2-circle me-1"></i>Issues & PRs
+                    </a>
+                    <a href="#sec-community" class="os-subnav-link">
+                        <i class="bi bi-people me-1"></i>Community
+                    </a>
+                    <a href="#sec-technology" class="os-subnav-link">
+                        <i class="bi bi-code-slash me-1"></i>Technology
+                    </a>
+                    <a href="#sec-history" class="os-subnav-link">
+                        <i class="bi bi-clock-history me-1"></i>History
+                    </a>
+                </div>
+                <div class="d-none d-md-flex align-items-center gap-2 extra-small text-muted font-monospace">
+                    <span>Scope: <strong class="text-dark">{{ coverage.window_label }}</strong></span>
+                    <span>·</span>
+                    <button type="button" class="btn btn-link p-0 text-primary extra-small text-decoration-none font-monospace" data-bs-toggle="modal" data-bs-target="#scoreBreakdownModal">
+                        <i class="bi bi-info-circle me-1"></i>Methodology
+                    </button>
+                </div>
+            </div>
+        </nav>
 
         <!-- DATA COVERAGE & SCOPE TRANSPARENCY BANNER (Section 5 & 6) -->
         <div class="os-coverage-banner mb-4 shadow-xs">
@@ -326,7 +411,7 @@
         </div>
 
         <!-- LEVEL 2: COMMIT ACTIVITY & TIME-SERIES TRENDS (Section 23) -->
-        <div class="card border shadow-sm p-4 mb-4">
+        <div id="sec-activity" class="card border shadow-sm p-4 mb-4">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
                 <div>
                     <h2 class="h5 fw-bold text-dark mb-1 d-flex align-items-center gap-2">
@@ -398,7 +483,7 @@
         </div>
 
         <!-- LEVEL 2: ISSUES & PULL REQUESTS ANALYTICS (SIDE-BY-SIDE) (Section 24 & 25) -->
-        <div class="row g-4 mb-4">
+        <div id="sec-issues-prs" class="row g-4 mb-4">
 
             <!-- Issue Analytics Card -->
             <div class="col-lg-6">
@@ -510,7 +595,7 @@
         </div>
 
         <!-- LEVEL 2: CONTRIBUTORS & DISTRIBUTION LEADERBOARD (Section 18 & 26) -->
-        <div class="card border shadow-sm p-4 mb-4">
+        <div id="sec-community" class="card border shadow-sm p-4 mb-4">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
                 <div>
                     <h2 class="h5 fw-bold text-dark mb-1 d-flex align-items-center gap-2">
@@ -588,7 +673,7 @@
         </div>
 
         <!-- LEVEL 2: PROGRAMMING LANGUAGES BREAKDOWN (Section 26) -->
-        <div class="card border shadow-sm p-4 mb-4">
+        <div id="sec-technology" class="card border shadow-sm p-4 mb-4">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
                 <div>
                     <h2 class="h5 fw-bold text-dark mb-1 d-flex align-items-center gap-2">
@@ -657,7 +742,7 @@
         </div>
 
         <!-- LEVEL 3: HISTORICAL HEALTH SCORE TREND (Section 28 & 30) -->
-        <div class="card border shadow-sm p-4 mb-4">
+        <div id="sec-history" class="card border shadow-sm p-4 mb-4">
             <div class="d-flex align-items-center justify-content-between mb-3">
                 <div>
                     <h2 class="h5 fw-bold text-dark mb-1 d-flex align-items-center gap-2">
@@ -684,6 +769,71 @@
             </div>
         </div>
 
+    </div>
+</div>
+
+<!-- SCORE BREAKDOWN MODAL (Phase 20) -->
+<div class="modal fade" id="scoreBreakdownModal" tabindex="-1" aria-labelledby="scoreBreakdownModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content border shadow-md">
+            <div class="modal-header border-bottom py-3">
+                <div>
+                    <h5 class="modal-title fw-bold text-dark d-flex align-items-center gap-2" id="scoreBreakdownModalLabel">
+                        <i class="bi bi-shield-check text-primary"></i>
+                        Health Score Methodology & Measured Signals
+                    </h5>
+                    <div class="text-muted extra-small">Deterministic 5-pillar mathematical model evaluated for {{ repo.full_name }} ({{ coverage.window_label }})</div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="p-3 bg-light rounded-3 border mb-4">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="small fw-bold text-dark">Overall Health Score:</span>
+                        <span class="badge bg-{{ health.tier_badge }}-subtle text-{{ health.tier_badge }} border border-{{ health.tier_badge }}-subtle fs-6 font-monospace">
+                            {{ health.total_score }} / 100 — {{ health.health_tier }}
+                        </span>
+                    </div>
+                    <div class="extra-small text-secondary font-monospace">
+                        Final Score = round((Activity &times; 0.25) + (Issues &times; 0.20) + (PRs &times; 0.20) + (Community &times; 0.15) + (Maintenance &times; 0.20))
+                    </div>
+                </div>
+
+                <div class="row g-3">
+                    {% for c in health.components %}
+                    <div class="col-12">
+                        <div class="p-3 border rounded-2 bg-white">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <div class="fw-bold text-dark d-flex align-items-center gap-2">
+                                    <span>{{ c.name }}</span>
+                                    <span class="badge bg-light text-secondary border extra-small font-monospace">{{ c.weight }} Weight</span>
+                                </div>
+                                <span class="badge {% if c.score >= 80 %}bg-success-subtle text-success border border-success-subtle{% elif c.score >= 60 %}bg-primary-subtle text-primary border border-primary-subtle{% elif c.score >= 40 %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} font-monospace">
+                                    {{ c.score }} / 100
+                                </span>
+                            </div>
+                            <p class="text-secondary extra-small mb-2">{{ c.description }}</p>
+                            <ul class="extra-small text-secondary ps-3 mb-0">
+                                {% for sig in c.signals %}
+                                <li class="mb-1">{{ sig }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div class="mt-4 p-3 bg-light rounded-2 border text-muted extra-small">
+                    <strong>Important Analytical Note:</strong> Scores and tier ratings are application-defined diagnostics based on public telemetry returned by GitHub within the selected analysis period. They are not universal software engineering quality certifications.
+                </div>
+            </div>
+            <div class="modal-footer py-2 border-top">
+                <a href="{% url 'about' %}" class="btn btn-sm os-btn-secondary">
+                    <i class="bi bi-book me-1"></i> Full Platform Documentation
+                </a>
+                <button type="button" class="btn btn-sm os-btn-primary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
