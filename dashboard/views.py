@@ -203,11 +203,30 @@ def history_detail_view(request: HttpRequest, owner: str, repo: str) -> HttpResp
     """
     Displays historical audit log and time-series trend of health scores
     and metrics over multiple analyses for a specific repository.
+    Handles existing history, empty history, missing repository, and DB errors cleanly.
     """
-    history_data = RepositoryService.get_history_detail(owner=owner, repo=repo)
+    target_repo = f"{owner}/{repo}"
+    window = request.GET.get('window', 'all').strip().lower()
+    if window not in ('all', '30d', '90d', '6m', '1y', '180d', '365d'):
+        window = 'all'
+
+    try:
+        history_data = RepositoryService.get_history_detail(owner=owner, repo=repo, window=window)
+    except Exception as e:
+        logger.error("Database error retrieving history for %s/%s: %s", owner, repo, e, exc_info=True)
+        return render(request, 'errors/500.html', {
+            'error_title': 'Unable to Load Historical Data',
+            'error_message': 'A database error occurred while retrieving repository history. Please try again later.',
+        }, status=500)
+
     if not history_data:
-        full_name = f"{owner}/{repo}"
-        return get_object_or_404(Repository, full_name__iexact=full_name)
+        # Case 3: Repository record does not exist in local database
+        return render(request, 'history_detail.html', {
+            'not_found': True,
+            'target_repo': target_repo,
+            'owner': owner,
+            'repo_name': repo,
+        }, status=404)
 
     return render(request, 'history_detail.html', history_data)
 

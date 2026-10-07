@@ -112,24 +112,100 @@ class RepositoryService:
         return catalog_items
 
     @classmethod
-    def get_history_detail(cls, owner: str, repo: str) -> Optional[Dict[str, Any]]:
+    def get_history_detail(
+        cls,
+        owner: str,
+        repo: str,
+        window: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
         """
         Retrieves the complete audit trail and historical trend for a repository.
-        Uses select_related and prefetch_related for optimal query performance.
+        Performs robust canonical lookup (full_name, owner+name, name alias).
+        Ensures trend curves are window-aware and isolates incompatible time horizons.
         """
         full_name = f"{owner}/{repo}"
-        repository = Repository.objects.prefetch_related('analyses', 'languages').filter(full_name__iexact=full_name).first()
+        # 1. Exact canonical full_name match (case-insensitive)
+        repository = (
+            Repository.objects.prefetch_related('analyses', 'languages')
+            .filter(full_name__iexact=full_name)
+            .first()
+        )
+        # 2. owner & name match (case-insensitive)
+        if not repository:
+            repository = (
+                Repository.objects.prefetch_related('analyses', 'languages')
+                .filter(owner__iexact=owner, name__iexact=repo)
+                .first()
+            )
+        # 3. Flexible lookup by repository name (handles transfer/rename aliases like facebook/react vs react/react)
+        if not repository:
+            candidates = Repository.objects.prefetch_related('analyses', 'languages').filter(name__iexact=repo)
+            if candidates.count() == 1:
+                repository = candidates.first()
+            elif candidates.count() > 1:
+                for c in candidates:
+                    if owner.lower() in c.full_name.lower() or c.owner.lower() in owner.lower():
+                        repository = c
+                        break
+                if not repository:
+                    repository = candidates.first()
+
         if not repository:
             return None
 
-        analyses = repository.analyses.order_by('-analyzed_at')
-        trend_data = AnalyticsEngine.calculate_historical_trend(repository.analyses.order_by('analyzed_at'))
+        all_analyses = repository.analyses.order_by('-analyzed_at')
+        available_windows = list(repository.analyses.values_list('analysis_window', flat=True).distinct())
+
+        normalized_window = (window or 'all').strip().lower()
+        if normalized_window not in ('all', '30d', '90d', '6m', '1y', '180d', '365d'):
+            normalized_window = 'all'
+
+        if normalized_window != 'all':
+            analyses = all_analyses.filter(analysis_window=normalized_window)
+            trend_qs = repository.analyses.filter(analysis_window=normalized_window).order_by('analyzed_at')
+            trend_window = normalized_window
+        else:
+            analyses = all_analyses
+            latest = all_analyses.first()
+            trend_window = latest.analysis_window if latest else '90d'
+            trend_qs = repository.analyses.filter(analysis_window=trend_window).order_by('analyzed_at')
+            if not trend_qs.exists() and all_analyses.exists():
+                trend_qs = repository.analyses.order_by('analyzed_at')
+
+        trend_data = AnalyticsEngine.calculate_historical_trend(trend_qs)
+
+        scores = trend_data.get('scores', [])
+        latest_score = scores[-1] if scores else (all_analyses.first().health_score if all_analyses.exists() else None)
+        previous_score = scores[-2] if len(scores) > 1 else None
+        score_change = (latest_score - previous_score) if (latest_score is not None and previous_score is not None) else 0
+
+        if score_change > 0:
+            trend_direction = 'improving'
+        elif score_change < 0:
+            trend_direction = 'declining'
+        else:
+            trend_direction = 'stable'
+
+        trend_data['latest_score'] = latest_score
+        trend_data['previous_score'] = previous_score
+        trend_data['score_change'] = score_change
+        trend_data['trend_direction'] = trend_direction
+        trend_data['trend_window'] = trend_window
+
+        latest_snapshot = analyses.first() if analyses.exists() else all_analyses.first()
 
         return {
             'repository': repository,
             'analyses': analyses,
+            'latest_snapshot': latest_snapshot,
             'trend': trend_data,
             'trend_json': json.dumps(trend_data),
+            'available_windows': available_windows,
+            'current_window': normalized_window,
+            'trend_window': trend_window,
+            'has_history': all_analyses.exists(),
+            'filtered_count': analyses.count(),
+            'total_count': all_analyses.count(),
         }
 
     @classmethod

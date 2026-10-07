@@ -7,7 +7,7 @@
 [![Pandas](https://img.shields.io/badge/Pandas-2.2+-150458?style=flat&logo=pandas&logoColor=white)](https://pandas.pydata.org/)
 [![Chart.js](https://img.shields.io/badge/Chart.js-4.4-FF6384?style=flat&logo=chartdotjs&logoColor=white)](https://www.chartjs.org/)
 [![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3-7952B3?style=flat&logo=bootstrap&logoColor=white)](https://getbootstrap.com/)
-[![Tests](https://img.shields.io/badge/Tests-94%20Passed-success?style=flat&logo=pytest&logoColor=white)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-105%20Passed-success?style=flat&logo=pytest&logoColor=white)](#testing)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **OpenSourceLens** is a production-grade open-source project intelligence and health analytics platform built as part of the **Open Source Technologies (OST)** engineering curriculum. It transforms raw telemetry from the public GitHub REST API into actionable engineering metrics, evaluating repository activity, triage responsiveness, code integration, maintainer diversity, and hygiene through a transparent, reproducible, multi-signal methodology.
@@ -520,7 +520,7 @@ Open your browser to: **`http://127.0.0.1:8000/`**
 
 ## Testing
 
-The project includes an automated test suite with **72 test cases** covering every layer of the system. Tests use Python's `unittest.mock` to mock external GitHub API calls and run against an isolated SQLite test database with zero external network or database dependencies.
+The project includes an automated test suite with **105 test cases** covering every layer of the system. Tests use Python's `unittest.mock` to mock external GitHub API calls and run against an isolated test database with zero external network or database dependencies.
 
 Run the test suite:
 
@@ -533,15 +533,17 @@ python manage.py test
 - **`tests/test_github_service.py` (12 tests):** Pagination cycles, HTTP 404, HTTP 401, HTTP 403/429 rate limit reset parsing, HTTP 500 server errors, request timeouts, and malformed JSON.
 - **`tests/test_models.py` (9 tests):** Database relationships, cascading deletes, unique constraints, and atomic transaction rollback.
 - **`tests/test_analytics.py` (17 tests):** Pandas time-series grouping, outlier-resilient median close times, HHI concentration calculations, and zero-division edge cases.
-- **`tests/test_views.py` (18 tests):** View lifecycles, caching verification, force refresh (`?refresh=true`), configurable window parameters (`30d`, `90d`, `180d`, `365d`), error redirects, and edge-case repositories (0 issues, 0 PRs, single contributor, archived, and forked repos).
-- **`tests/test_hardening.py` (14 tests):** Window & cache isolation (30d vs 90d vs 365d), immutable historical snapshots, stale entity synchronization pruning, pull request window cutoff filtering, zero synthetic comparison fallback verification, active-day vs calendar-day commit averages, CSRF protection on POST refresh, `.env` version control isolation, and Phase 25 Cases 1–6 data-integrity assertions.
+- **`tests/test_views.py` (18 tests):** View lifecycles, caching verification, force refresh (`?refresh=true`), configurable window parameters (`30d`, `90d`, `180d`, `365d`), error redirects, and edge-case repositories.
+- **`tests/test_hardening.py` (14 tests):** Window & cache isolation (30d vs 90d vs 365d), immutable historical snapshots, stale entity synchronization pruning, pull request window cutoff filtering, zero synthetic comparison fallback verification, active-day vs calendar-day commit averages, CSRF protection on POST refresh, and `.env` version control isolation.
+- **`tests/test_rate_limiting.py` (17 tests):** Dedicated tests for rate limiting, resilience, token detection, mock quota ceilings, reset countdown calculations, and cached snapshot fallback recovery.
+- **`tests/test_history_hardening.py` (11 tests):** Phase 23 regression suite covering History Detail audit console Cases 1–4, GitHub organization transfer alias resolution (`facebook/react` $\to$ `react/react`), window-isolated trend evaluations, empty snapshot catalog handling, custom OpenSourceLens 404 recovery page without debug leaks, immutable snapshot preservation, safe JSON script chart embedding, and Architecture engineering specification page verification.
 
 ```text
-Found 77 test(s).
+Found 105 test(s).
 System check identified no issues (0 silenced).
-.............................................................................
+.........................................................................................................
 ----------------------------------------------------------------------
-Ran 77 tests in 4.988s
+Ran 105 tests in 4.770s
 
 OK
 ```

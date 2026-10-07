@@ -717,7 +717,7 @@
                                 <tr>
                                     <td>
                                         <div class="d-flex align-items-center gap-2">
-                                            <span class="os-color-bullet" style="background-color: {{ item.color }};"></span>
+                                            <span class="os-color-bullet" style="--bullet-bg: {{ item.color }}; background-color: var(--bullet-bg);"></span>
                                             <span class="fw-semibold text-dark small">{{ item.language }}</span>
                                         </div>
                                     </td>
@@ -725,7 +725,7 @@
                                     <td class="font-monospace fw-semibold small">{{ item.percentage }}%</td>
                                     <td>
                                         <div class="progress" style="height: 6px;">
-                                            <div class="progress-bar" role="progressbar" style="width: {{ item.percentage }}%; background-color: {{ item.color }};"></div>
+                                            <div class="progress-bar" role="progressbar" style="--bar-pct: {{ item.percentage }}%; --bar-bg: {{ item.color }}; width: var(--bar-pct); background-color: var(--bar-bg);"></div>
                                         </div>
                                     </td>
                                 </tr>
@@ -751,7 +751,7 @@
                     </h2>
                     <p class="text-secondary small mb-0">Score progression across previous analyses of this repository</p>
                 </div>
-                <a href="{% url 'history_detail' owner=repo.owner repo=repo.name %}" class="btn btn-sm os-btn-secondary">
+                <a href="{% url 'history_detail' owner=repo.owner repo=repo.name %}{% if coverage.analysis_window %}?window={{ coverage.analysis_window }}{% endif %}" class="btn btn-sm os-btn-secondary">
                     View Complete Audit Log <i class="bi bi-arrow-right ms-1"></i>
                 </a>
             </div>

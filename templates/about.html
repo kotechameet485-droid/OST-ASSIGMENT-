@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Architecture & Methodology — OpenSourceLens{% endblock %}
+{% block title %}Architecture & Engineering Methodology — OpenSourceLens{% endblock %}
 
 {% block content %}
 <div class="py-5">
@@ -9,60 +9,334 @@
         <div class="row justify-content-center">
             <div class="col-lg-10">
 
-                <div class="text-center mb-5">
-                    <span class="badge bg-light text-primary border px-3 py-1 mb-2 font-monospace">Engineering Specification</span>
-                    <h1 class="display-6 fw-bold text-dark mb-3">Platform Architecture & Methodology</h1>
-                    <p class="lead text-secondary max-w-2xl mx-auto">
-                        A rigorous open-source project intelligence and health analytics platform built with Django, PostgreSQL, Pandas, and the GitHub REST API.
+                <!-- HERO SECTION (Phase 10 & 11) -->
+                <div class="text-center mb-4">
+                    <span class="badge bg-light text-primary border px-3 py-1 mb-2 font-monospace extra-small">
+                        Engineering Specification · OST Assignment
+                    </span>
+                    <h1 class="display-6 fw-bold text-dark mb-3">OpenSourceLens Architecture & Methodology</h1>
+                    <p class="lead text-secondary max-w-2xl mx-auto small mb-3">
+                        A rigorous open-source project intelligence and health analytics platform built with Django, PostgreSQL, Pandas, and the GitHub REST API. Understand how OpenSourceLens collects repository telemetry, processes analytics, calculates health scores, stores immutable snapshots, and presents evidence-driven repository intelligence.
                     </p>
-                </div>
 
-                <!-- Architectural Flow Diagram Card -->
-                <div class="card border shadow-xs p-4 mb-4">
-                    <h2 class="h5 fw-bold text-dark mb-3 d-flex align-items-center gap-2">
-                        <i class="bi bi-diagram-3 text-primary"></i>
-                        System Data Pipeline
-                    </h2>
-                    <div class="p-3 bg-light rounded-3 font-monospace small text-dark border">
-<pre class="mb-0">
-User Request (Browser)
-   ↓
-Django Web Layer (URL Routing, Views, Forms)
-   ↓
-Analysis Service (Orchestration & Caching Layer)
-   ├── GitHub API Service (Authenticated REST Client, Timeouts, Pagination Engine)
-   ├── Data Normalization Layer (Payload Sanitization & Date Parsing)
-   ├── Relational Persistence Layer (PostgreSQL / SQLite via Django ORM Transactions)
-   └── Analytics Engine (Pandas Vectorized Aggregations & Time-Series Modeling)
-             ↓
-        5-Pillar Health Scoring & Concentration Diagnostics (HHI)
-             ↓
-  Deterministic Presentation & Visual Telemetry (Chart.js + Responsive UI)
-</pre>
+                    <!-- Technology Stack Badges -->
+                    <div class="d-flex flex-wrap justify-content-center gap-2 mb-4">
+                        <span class="badge bg-white text-dark border font-monospace extra-small py-1 px-2">
+                            <i class="bi bi-code-slash text-primary me-1"></i>Django 5.0+
+                        </span>
+                        <span class="badge bg-white text-dark border font-monospace extra-small py-1 px-2">
+                            <i class="bi bi-database text-info me-1"></i>PostgreSQL 16+
+                        </span>
+                        <span class="badge bg-white text-dark border font-monospace extra-small py-1 px-2">
+                            <i class="bi bi-calculator text-success me-1"></i>Pandas 2.2+
+                        </span>
+                        <span class="badge bg-white text-dark border font-monospace extra-small py-1 px-2">
+                            <i class="bi bi-github text-dark me-1"></i>GitHub REST API v3
+                        </span>
+                        <span class="badge bg-white text-dark border font-monospace extra-small py-1 px-2">
+                            <i class="bi bi-bootstrap text-purple me-1"></i>Bootstrap 5.3
+                        </span>
+                        <span class="badge bg-white text-dark border font-monospace extra-small py-1 px-2">
+                            <i class="bi bi-bar-chart-line text-warning me-1"></i>Chart.js 4.4
+                        </span>
                     </div>
                 </div>
 
-                <!-- 5-Pillar Health Methodology -->
-                <div class="card border shadow-xs p-4 mb-4">
-                    <h2 class="h5 fw-bold text-dark mb-3 d-flex align-items-center gap-2">
+                <!-- STICKY SECTION NAVIGATION (Phase 10) -->
+                <div class="sticky-top bg-white border rounded-3 p-2 mb-4 shadow-xs" style="top: 70px; z-index: 1020;">
+                    <div class="d-flex align-items-center gap-1 overflow-x-auto text-nowrap py-1 px-2 extra-small font-monospace">
+                        <span class="text-muted fw-bold me-1"><i class="bi bi-compass me-1"></i>Jump to:</span>
+                        <a href="#sec-overview" class="btn btn-sm btn-light border py-1 px-2 extra-small text-dark">Overview</a>
+                        <a href="#sec-pipeline" class="btn btn-sm btn-light border py-1 px-2 extra-small text-dark">Data Pipeline</a>
+                        <a href="#sec-lifecycle" class="btn btn-sm btn-light border py-1 px-2 extra-small text-dark">Request Lifecycle</a>
+                        <a href="#sec-datamodel" class="btn btn-sm btn-light border py-1 px-2 extra-small text-dark">Data Model</a>
+                        <a href="#sec-scoring" class="btn btn-sm btn-light border py-1 px-2 extra-small text-dark">Health Scoring</a>
+                        <a href="#sec-resilience" class="btn btn-sm btn-light border py-1 px-2 extra-small text-dark">API & Resilience</a>
+                        <a href="#sec-limitations" class="btn btn-sm btn-light border py-1 px-2 extra-small text-dark">Scope & Limits</a>
+                        <a href="#sec-syllabus" class="btn btn-sm btn-light border py-1 px-2 extra-small text-dark">OST Syllabus</a>
+                    </div>
+                </div>
+
+                <!-- SECTION 1: ARCHITECTURAL OVERVIEW -->
+                <div id="sec-overview" class="card border shadow-xs p-4 mb-4 bg-white">
+                    <h2 class="h5 fw-bold text-dark mb-2 d-flex align-items-center gap-2">
+                        <i class="bi bi-layers text-primary"></i>
+                        Architectural Overview & Design Principles
+                    </h2>
+                    <p class="text-secondary small mb-3">
+                        OpenSourceLens is architected as an enterprise-grade multi-tier web application adhering to the classic Model-Template-View (MTV) design pattern, fortified with a decoupled service orchestration layer and a vectorized analytical processing pipeline.
+                    </p>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <div class="p-3 border rounded bg-light h-100">
+                                <h3 class="h6 fw-bold text-dark mb-1">1. Decoupled Service Layer</h3>
+                                <p class="text-muted extra-small mb-0">
+                                    Views remain thin controllers. All external GitHub API ingestion, data normalization, database synchronization, and caching decisions are orchestrated inside dedicated service singletons (<code>GitHubService</code>, <code>AnalysisService</code>, <code>RepositoryService</code>).
+                                </p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="p-3 border rounded bg-light h-100">
+                                <h3 class="h6 fw-bold text-dark mb-1">2. Deterministic Analytics</h3>
+                                <p class="text-muted extra-small mb-0">
+                                    All metric computations are handled exclusively by <code>AnalyticsEngine</code> using vectorized Pandas DataFrames. Zero analytics are simulated, fabricated, or randomized.
+                                </p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="p-3 border rounded bg-light h-100">
+                                <h3 class="h6 fw-bold text-dark mb-1">3. Immutable Snapshots</h3>
+                                <p class="text-muted extra-small mb-0">
+                                    Each analysis run creates a dedicated, immutable <code>RepositoryAnalysis</code> snapshot record inside an isolated atomic database transaction (<code>transaction.atomic</code>), preserving historical truth and auditability.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SECTION 2: SYSTEM DATA PIPELINE (Phase 10) -->
+                <div id="sec-pipeline" class="card border shadow-xs p-4 mb-4 bg-white">
+                    <h2 class="h5 fw-bold text-dark mb-2 d-flex align-items-center gap-2">
+                        <i class="bi bi-diagram-3 text-primary"></i>
+                        System Data Pipeline
+                    </h2>
+                    <p class="text-secondary small mb-3">
+                        End-to-end data ingestion, transformation, persistence, and visual rendering pipeline:
+                    </p>
+
+                    <div class="p-3 bg-light rounded-3 font-monospace extra-small text-dark border mb-4">
+<pre class="mb-0">
+[User Request in Browser]
+       ↓
+[Django Web Layer] (URL Routing, Form Validation, CSRF Protection)
+       ↓
+[Analysis Service] (Workflow Orchestration & 60-Min Cache Decision Engine)
+       ├── [GitHub API Service] (Authenticated REST Client, Bearer Token, Header Versioning, Backoff Retry)
+       ├── [Data Normalization] (Date Parsing, Pull Request Filtering, Payload Sanitization)
+       ├── [Relational Persistence] (PostgreSQL / SQLite via Atomic Django ORM Transactions)
+       └── [Analytics Engine] (Pandas DataFrame Aggregations & Quantile Time-Series Modeling)
+                 ↓
+      [5-Pillar Health Scoring & Herfindahl-Hirschman Contributor Concentration (HHI)]
+                 ↓
+[Deterministic Presentation] (Chart.js Canvas Renderers, Responsive Bootstrap 5 UI)
+</pre>
+                    </div>
+
+                    <!-- Pipeline Stages Table -->
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr class="text-muted extra-small font-monospace text-uppercase">
+                                    <th style="width: 180px;">Pipeline Stage</th>
+                                    <th style="width: 160px;">Technology</th>
+                                    <th>Core Responsibilities</th>
+                                </tr>
+                            </thead>
+                            <tbody class="extra-small">
+                                <tr>
+                                    <td class="fw-bold text-dark">1. Web Routing & Forms</td>
+                                    <td class="font-monospace text-secondary">Django 5.0+ Views</td>
+                                    <td>HTTP GET/POST parsing, regex repository validation, CSRF verification, and view orchestration.</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-bold text-dark">2. Telemetry Ingestion</td>
+                                    <td class="font-monospace text-secondary">GitHub REST API v3</td>
+                                    <td>Centralized authenticated client (<code>2022-11-28</code>), transparent pagination, timeout resilience, rate-limit awareness.</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-bold text-dark">3. Data Normalization</td>
+                                    <td class="font-monospace text-secondary">Python Dateutil / Regex</td>
+                                    <td>Cleanses raw JSON, parses ISO-8601 timestamps with UTC timezone safety, isolates PRs from the GitHub issue feed.</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-bold text-dark">4. Relational Persistence</td>
+                                    <td class="font-monospace text-secondary">PostgreSQL / ORM</td>
+                                    <td>Atomic transactions (<code>transaction.atomic</code>), entity pruning, historical snapshot immutability.</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-bold text-dark">5. Statistical Analytics</td>
+                                    <td class="font-monospace text-secondary">Pandas 2.2+</td>
+                                    <td>Quantile median turnarounds, time-series binning (30d/90d/6m/1y), language byte distribution, HHI concentration.</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-bold text-dark">6. Health Scoring</td>
+                                    <td class="font-monospace text-secondary">AnalyticsEngine</td>
+                                    <td>Evaluates 5 deterministic engineering dimensions (Activity, Issues, PRs, Diversity, Hygiene) on a 0–100 scale.</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-bold text-dark">7. Presentation Layer</td>
+                                    <td class="font-monospace text-secondary">Bootstrap 5 + Chart.js</td>
+                                    <td>Interactive Canvas charts, accessible data tables, responsive layouts, transparent sample bounds.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- SECTION 3: REQUEST LIFECYCLE (Phase 10) -->
+                <div id="sec-lifecycle" class="card border shadow-xs p-4 mb-4 bg-white">
+                    <h2 class="h5 fw-bold text-dark mb-2 d-flex align-items-center gap-2">
+                        <i class="bi bi-arrow-repeat text-primary"></i>
+                        Request Lifecycle: From Repository URL to Health Score
+                    </h2>
+                    <p class="text-secondary small mb-3">
+                        Every repository analysis follows an exact 9-step execution pipeline guaranteeing data provenance and transaction integrity:
+                    </p>
+
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <div class="p-3 border rounded bg-light h-100">
+                                <span class="badge bg-primary text-white font-monospace extra-small mb-1">Step 1</span>
+                                <h3 class="h6 fw-bold text-dark mb-1">Input Validation</h3>
+                                <p class="text-muted extra-small mb-0">Parses GitHub URLs or shorthand (<code>owner/repo</code>) with strict regex checks, stripping trailing slashes and invalid characters.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="p-3 border rounded bg-light h-100">
+                                <span class="badge bg-primary text-white font-monospace extra-small mb-1">Step 2</span>
+                                <h3 class="h6 fw-bold text-dark mb-1">Identity Canonicalization</h3>
+                                <p class="text-muted extra-small mb-0">Resolves transfers and aliases (e.g. <code>facebook/react</code> $\to$ <code>react/react</code>) so entities map to canonical records.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="p-3 border rounded bg-light h-100">
+                                <span class="badge bg-primary text-white font-monospace extra-small mb-1">Step 3</span>
+                                <h3 class="h6 fw-bold text-dark mb-1">Cache Verification</h3>
+                                <p class="text-muted extra-small mb-0">Checks local PostgreSQL snapshots. If fresh within 60 minutes and <code>refresh=False</code>, serves instantly with zero API requests.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="p-3 border rounded bg-light h-100">
+                                <span class="badge bg-primary text-white font-monospace extra-small mb-1">Step 4</span>
+                                <h3 class="h6 fw-bold text-dark mb-1">Outbound Ingestion</h3>
+                                <p class="text-muted extra-small mb-0">Issues paginated HTTP calls with Bearer authentication for metadata, languages, commits, issues, PRs, and contributors.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="p-3 border rounded bg-light h-100">
+                                <span class="badge bg-primary text-white font-monospace extra-small mb-1">Step 5</span>
+                                <h3 class="h6 fw-bold text-dark mb-1">Data Cleansing</h3>
+                                <p class="text-muted extra-small mb-0">Filters pull requests out of issues, parses timestamps with UTC safety, and prunes stale records outside the window.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="p-3 border rounded bg-light h-100">
+                                <span class="badge bg-primary text-white font-monospace extra-small mb-1">Step 6</span>
+                                <h3 class="h6 fw-bold text-dark mb-1">Atomic Persistence</h3>
+                                <p class="text-muted extra-small mb-0">Saves entities and creates an immutable <code>RepositoryAnalysis</code> snapshot record inside <code>transaction.atomic()</code>.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="p-3 border rounded bg-light h-100">
+                                <span class="badge bg-primary text-white font-monospace extra-small mb-1">Step 7</span>
+                                <h3 class="h6 fw-bold text-dark mb-1">Statistical Modeling</h3>
+                                <p class="text-muted extra-small mb-0">Pandas calculates active-day vs calendar-day commit velocities, median resolution times, and contributor HHI concentration.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="p-3 border rounded bg-light h-100">
+                                <span class="badge bg-primary text-white font-monospace extra-small mb-1">Step 8</span>
+                                <h3 class="h6 fw-bold text-dark mb-1">Health Scoring</h3>
+                                <p class="text-muted extra-small mb-0">Computes the composite 5-pillar health index (0–100) and assigns an analytical maintainability tier.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="p-3 border rounded bg-light h-100">
+                                <span class="badge bg-primary text-white font-monospace extra-small mb-1">Step 9</span>
+                                <h3 class="h6 fw-bold text-dark mb-1">Dashboard Presentation</h3>
+                                <p class="text-muted extra-small mb-0">Renders interactive Chart.js visualizations, metric cards, and transparent data coverage bounds.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SECTION 4: DATA MODEL & SNAPSHOTS (Phase 10) -->
+                <div id="sec-datamodel" class="card border shadow-xs p-4 mb-4 bg-white">
+                    <h2 class="h5 fw-bold text-dark mb-2 d-flex align-items-center gap-2">
+                        <i class="bi bi-database text-primary"></i>
+                        Relational Data Model & Snapshot Immutability
+                    </h2>
+                    <p class="text-secondary small mb-3">
+                        The OpenSourceLens database schema is strictly normalized around the <code>Repository</code> root aggregate entity, maintaining relational integrity across child entities and immutable audit snapshots:
+                    </p>
+
+                    <div class="p-3 bg-light rounded-3 font-monospace extra-small text-dark border mb-3">
+<pre class="mb-0">
+Repository (Root Aggregate: owner, name, full_name, stars, forks, license, topics)
+   │
+   ├── Contributor (Foreign Key: username, contributions, avatar_url, profile_url)
+   ├── CommitActivity (Foreign Key: date, commit_count)
+   ├── Issue (Foreign Key: issue_number, title, state, created_at, closed_at)
+   ├── PullRequest (Foreign Key: pr_number, title, state, created_at, merged_at)
+   ├── Language (Foreign Key: language, bytes, percentage)
+   └── RepositoryAnalysis (Foreign Key: immutable snapshot_payload, health_score, 5 pillar scores)
+</pre>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="p-3 border rounded bg-light h-100">
+                                <h3 class="h6 fw-bold text-dark mb-1"><i class="bi bi-clock-history text-primary me-1"></i> Why Immutable Snapshots?</h3>
+                                <ul class="text-secondary ps-3 mb-0 extra-small">
+                                    <li><strong>Longitudinal Trend Tracking:</strong> Plotting health score trajectories requires historical snapshots that never mutate when subsequent analyses run.</li>
+                                    <li><strong>Reproducibility:</strong> Prior audits can be re-inspected exactly as they were evaluated at the time of submission.</li>
+                                    <li><strong>Window Isolation:</strong> A 30-day snapshot is completely isolated from a 90-day or 365-day analysis on the same repository.</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="p-3 border rounded bg-light h-100">
+                                <h3 class="h6 fw-bold text-dark mb-1"><i class="bi bi-shield-check text-success me-1"></i> Data Protection & ACID Guarantees</h3>
+                                <ul class="text-secondary ps-3 mb-0 extra-small">
+                                    <li><strong>Atomic Transactions:</strong> Database synchronizations run inside <code>transaction.atomic()</code>; partial or interrupted ingests rollback cleanly.</li>
+                                    <li><strong>Non-Destructive Overwrites:</strong> A failed live GitHub fetch (due to network drops or rate limits) never deletes or corrupts existing snapshots.</li>
+                                    <li><strong>Audit Logs:</strong> Complete serialized payloads (<code>snapshot_payload</code> JSONField) are saved alongside scalar metric columns.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SECTION 5: 5-PILLAR HEALTH METHODOLOGY (Phase 10) -->
+                <div id="sec-scoring" class="card border shadow-xs p-4 mb-4 bg-white">
+                    <h2 class="h5 fw-bold text-dark mb-2 d-flex align-items-center gap-2">
                         <i class="bi bi-shield-check text-primary"></i>
-                        5-Pillar Health Score Methodology
+                        5-Pillar Health Score Methodology & Weighting System
                     </h2>
                     <p class="text-secondary small mb-3">
                         The OpenSourceLens health score is evaluated across five weighted engineering dimensions (0–100 points each) to produce a composite health index:
                     </p>
 
+                    <!-- Weighting Visual Bar -->
+                    <div class="p-3 bg-light rounded-3 border mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1 font-monospace extra-small text-dark">
+                            <span>Composite Formula:</span>
+                            <span class="fw-bold">100% Total Weight</span>
+                        </div>
+                        <code class="d-block text-dark small mb-2">
+                            Final Score = round((Activity &times; 0.25) + (Issue &times; 0.20) + (PR &times; 0.20) + (Diversity &times; 0.15) + (Maintenance &times; 0.20))
+                        </code>
+                        <div class="progress" style="height: 10px;">
+                            <div class="progress-bar bg-success" style="width: 25%;" title="Activity (25%)">25%</div>
+                            <div class="progress-bar bg-primary" style="width: 20%;" title="Issue Management (20%)">20%</div>
+                            <div class="progress-bar bg-info" style="width: 20%;" title="PR Activity (20%)">20%</div>
+                            <div class="progress-bar bg-warning text-dark" style="width: 15%;" title="Contributor Diversity (15%)">15%</div>
+                            <div class="progress-bar bg-secondary" style="width: 20%;" title="Maintenance & Hygiene (20%)">20%</div>
+                        </div>
+                    </div>
+
+                    <!-- 5 Pillars Breakdown Cards -->
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
-                            <div class="p-3 border rounded-2 bg-light">
+                            <div class="p-3 border rounded-2 bg-light h-100">
                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                     <h3 class="h6 fw-bold text-dark mb-0">1. Activity Score</h3>
-                                    <span class="badge bg-white text-secondary border font-monospace">25% Weight</span>
+                                    <span class="badge bg-white text-secondary border font-monospace extra-small">25% Weight</span>
                                 </div>
-                                <p class="text-muted extra-small mb-2">Evaluates multi-signal development cadence across four explicit components (0–100 points):</p>
+                                <p class="text-muted extra-small mb-2">Multi-signal development cadence across four explicit components (0–100 points):</p>
                                 <ul class="extra-small text-secondary ps-3 mb-0">
                                     <li><strong>Recency (40%):</strong> Days since last push (&le;3d: 40 pts, &le;7d: 36, &le;14d: 32, &le;30d: 28, &le;60d: 22, &le;90d: 16, &le;180d: 10, &gt;180d: 4)</li>
-                                    <li><strong>Frequency (30%):</strong> Commit volume scaled against analysis window days</li>
+                                    <li><strong>Frequency (30%):</strong> Commit volume scaled against analysis window calendar days</li>
                                     <li><strong>Consistency (15%):</strong> Ratio of active commit days to total calendar days in window</li>
                                     <li><strong>Trend (15%):</strong> Velocity momentum comparing recent vs prior half of window</li>
                                 </ul>
@@ -70,25 +344,25 @@ Analysis Service (Orchestration & Caching Layer)
                         </div>
 
                         <div class="col-md-6">
-                            <div class="p-3 border rounded-2 bg-light">
+                            <div class="p-3 border rounded-2 bg-light h-100">
                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                     <h3 class="h6 fw-bold text-dark mb-0">2. Issue Management Score</h3>
-                                    <span class="badge bg-white text-secondary border font-monospace">20% Weight</span>
+                                    <span class="badge bg-white text-secondary border font-monospace extra-small">20% Weight</span>
                                 </div>
-                                <p class="text-muted extra-small mb-2">Measures triage velocity, resolution rates, and backlog scale (0–100 points):</p>
+                                <p class="text-muted extra-small mb-2">Measures triage velocity, resolution rates, and backlog control (0–100 points):</p>
                                 <ul class="extra-small text-secondary ps-3 mb-0">
                                     <li><strong>Sample Resolution Rate (45%):</strong> <code>(Closed Issues / Analyzed Issues) &times; 45</code></li>
                                     <li><strong>Turnaround Velocity (35%):</strong> Evaluated via <strong>median resolution time</strong> (&le;24h: 35 pts, &le;72h: 28, &le;1wk: 22, &le;1mo: 15, &gt;1mo: 8)</li>
-                                    <li><strong>Backlog Hygiene (20%):</strong> Ratio of unresolved issues open &gt;90 days relative to analyzed sample</li>
+                                    <li><strong>Backlog Hygiene (20%):</strong> Penalty applied for unresolved issues open &gt;90 days</li>
                                 </ul>
                             </div>
                         </div>
 
                         <div class="col-md-6">
-                            <div class="p-3 border rounded-2 bg-light">
+                            <div class="p-3 border rounded-2 bg-light h-100">
                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                     <h3 class="h6 fw-bold text-dark mb-0">3. PR Activity Score</h3>
-                                    <span class="badge bg-white text-secondary border font-monospace">20% Weight</span>
+                                    <span class="badge bg-white text-secondary border font-monospace extra-small">20% Weight</span>
                                 </div>
                                 <p class="text-muted extra-small mb-2">Quantifies contribution throughput and merge velocity within the window (0–100 points):</p>
                                 <ul class="extra-small text-secondary ps-3 mb-0">
@@ -101,10 +375,10 @@ Analysis Service (Orchestration & Caching Layer)
                         </div>
 
                         <div class="col-md-6">
-                            <div class="p-3 border rounded-2 bg-light">
+                            <div class="p-3 border rounded-2 bg-light h-100">
                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                     <h3 class="h6 fw-bold text-dark mb-0">4. Contributor Diversity</h3>
-                                    <span class="badge bg-white text-secondary border font-monospace">15% Weight</span>
+                                    <span class="badge bg-white text-secondary border font-monospace extra-small">15% Weight</span>
                                 </div>
                                 <p class="text-muted extra-small mb-2">Assesses distribution and concentration among analyzed contributors (0–100 points):</p>
                                 <ul class="extra-small text-secondary ps-3 mb-0">
@@ -120,33 +394,52 @@ Analysis Service (Orchestration & Caching Layer)
                             <div class="p-3 border rounded-2 bg-light">
                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                     <h3 class="h6 fw-bold text-dark mb-0">5. Maintenance & Hygiene Score</h3>
-                                    <span class="badge bg-white text-secondary border font-monospace">20% Weight</span>
+                                    <span class="badge bg-white text-secondary border font-monospace extra-small">20% Weight</span>
                                 </div>
                                 <p class="text-muted extra-small mb-2">Verifies metadata standards, licensing, and repository status via direct 0–100 normalization:</p>
-                                <ul class="extra-small text-secondary ps-3 mb-0">
-                                    <li><strong>Documented Open-Source License:</strong> 30 points (validated via SPDX identifiers)</li>
-                                    <li><strong>Active Status:</strong> 25 points (deducted if repository is archived / read-only)</li>
-                                    <li><strong>Descriptive Project Metadata:</strong> 20 points (meaningful repository description)</li>
-                                    <li><strong>Discoverability & Categorization:</strong> 15 points (defined repository topic tags)</li>
-                                    <li><strong>Default Branch Hygiene:</strong> 10 points (standard main or master branch)</li>
-                                </ul>
+                                <div class="row g-2 extra-small text-secondary">
+                                    <div class="col-sm-6 col-md"><strong>License (30 pts):</strong> Valid SPDX open-source license detected</div>
+                                    <div class="col-sm-6 col-md"><strong>Active Status (25 pts):</strong> Non-archived and maintainable</div>
+                                    <div class="col-sm-6 col-md"><strong>Description (20 pts):</strong> Meaningful repository description</div>
+                                    <div class="col-sm-6 col-md"><strong>Topics (15 pts):</strong> Discoverability topic tags defined</div>
+                                    <div class="col-sm-6 col-md"><strong>Branch (10 pts):</strong> Standard default branch (main/master)</div>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Composite Formula -->
-                    <div class="p-3 bg-light rounded-3 font-monospace small text-dark border">
-                        <strong>Composite Formula:</strong><br>
-                        <code>Final Score = round((Activity &times; 0.25) + (Issue &times; 0.20) + (PR &times; 0.20) + (Diversity &times; 0.15) + (Maintenance &times; 0.20))</code><br>
-                        <span class="extra-small text-muted">Health Tiers: 85–100 Excellent | 70–84 Good | 50–69 Moderate | 0–49 At Risk. These categories are application-defined analytical classifications and are not universal software-quality standards.</span>
+                    <!-- Health Tiers & Interpretation -->
+                    <div class="p-3 bg-light rounded-3 border">
+                        <span class="fw-bold text-dark extra-small d-block mb-1 font-monospace">Health Score Interpretation Tiers:</span>
+                        <div class="row g-2 extra-small">
+                            <div class="col-sm-6 col-md-3">
+                                <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace me-1">85–100</span>
+                                <strong class="text-dark">Excellent:</strong> Highly active, structured triage, resilient maintainer base.
+                            </div>
+                            <div class="col-sm-6 col-md-3">
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace me-1">70–84</span>
+                                <strong class="text-dark">Good:</strong> Consistent development cadence with manageable backlog.
+                            </div>
+                            <div class="col-sm-6 col-md-3">
+                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle font-monospace me-1">50–69</span>
+                                <strong class="text-dark">Moderate:</strong> Slower review turnaround or higher maintainer dependency.
+                            </div>
+                            <div class="col-sm-6 col-md-3">
+                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle font-monospace me-1">0–49</span>
+                                <strong class="text-dark">At Risk:</strong> Stagnant commit cadence or elevated maintenance risk.
+                            </div>
+                        </div>
+                        <div class="text-muted extra-small mt-2 pt-2 border-top">
+                            <em>Methodology Notice:</em> Health score classifications are application-defined comparative diagnostic indicators designed to highlight operational trends. They are not universal software-quality certifications.
+                        </div>
                     </div>
                 </div>
 
-                <!-- GitHub API Architecture & Rate-Limit Resilience -->
-                <div class="card border shadow-xs p-4 mb-4">
-                    <h2 class="h5 fw-bold text-dark mb-3 d-flex align-items-center gap-2">
+                <!-- SECTION 6: GITHUB API & RATE-LIMIT RESILIENCE (Phase 10) -->
+                <div id="sec-resilience" class="card border shadow-xs p-4 mb-4 bg-white">
+                    <h2 class="h5 fw-bold text-dark mb-2 d-flex align-items-center gap-2">
                         <i class="bi bi-shield-lock text-primary"></i>
-                        GitHub API Authentication & Rate-Limit Resilience
+                        GitHub API Architecture & Rate-Limit Resilience
                     </h2>
                     <p class="text-secondary small mb-3">
                         OpenSourceLens implements an enterprise-grade GitHub API client architecture designed for strict security, rate-limit awareness, and zero-data-loss resilience:
@@ -179,13 +472,14 @@ Analysis Service (Orchestration & Caching Layer)
                                 </p>
                                 <ul class="extra-small text-secondary ps-3 mb-0">
                                     <li><strong>Non-Destructive:</strong> Failed live fetches never overwrite or erase valid stored snapshots.</li>
-                                    <li><strong>Clear Warning Banner:</strong> Telemetry dashboards inform users when displaying stored snapshots due to active rate limits.</li>
+                                    <li><strong>Prominent Notice:</strong> Telemetry dashboards inform users when displaying stored snapshots due to active rate limits.</li>
                                     <li><strong>Exact Reset Telemetry:</strong> Displays UTC reset timestamps and countdowns derived directly from GitHub response headers.</li>
                                 </ul>
                             </div>
                         </div>
                     </div>
 
+                    <!-- Safe Diagnostic Command Info -->
                     <div class="p-3 bg-light rounded-3 font-monospace extra-small text-dark border">
                         <div class="d-flex justify-content-between align-items-center mb-1">
                             <span class="fw-bold">CLI Health Check Command:</span>
@@ -196,21 +490,24 @@ Analysis Service (Orchestration & Caching Layer)
                     </div>
                 </div>
 
-                <!-- Important Limitations & Privacy (Section 50 & 51) -->
-                <div class="card border shadow-xs p-4 mb-4">
-                    <h2 class="h5 fw-bold text-dark mb-3 d-flex align-items-center gap-2">
+                <!-- SECTION 7: SCOPE, SAMPLING & LIMITATIONS (Phase 10) -->
+                <div id="sec-limitations" class="card border shadow-xs p-4 mb-4 bg-white">
+                    <h2 class="h5 fw-bold text-dark mb-2 d-flex align-items-center gap-2">
                         <i class="bi bi-exclamation-triangle text-warning"></i>
-                        Important Limitations & Analytical Scope
+                        Data Quality, Sampling & Analytical Scope
                     </h2>
-                    <ul class="text-secondary small mb-3 ps-3">
+                    <p class="text-secondary small mb-3">
+                        In accordance with academic rigor and data provenance standards, OpenSourceLens makes all sampling bounds transparent:
+                    </p>
+                    <ul class="text-secondary small mb-0 ps-3">
                         <li class="mb-2">
-                            <strong>API Sampling:</strong> GitHub REST API queries analyze bounded batches of recent commits, issues, and PRs (up to configured pagination limits). Metrics reflect this analyzed sample within the selected window.
+                            <strong>API Sampling vs Total Counts:</strong> GitHub REST API queries analyze bounded batches of recent commits (up to 100–250 per window), issues (up to 50–150), and PRs (up to 50–150). Metrics reflect this analyzed sample within the selected window, clearly denoted as "Analyzed Commits" rather than total repository history.
                         </li>
                         <li class="mb-2">
-                            <strong>Analysis Windows:</strong> Velocity and cadence metrics depend directly on the chosen window (30D, 90D, 6M, 1Y).
+                            <strong>Analysis Window Sensitivity:</strong> Velocity, turnaround, and cadence metrics depend directly on the chosen window (30D, 90D, 6M, 1Y). An active repository evaluated across 30 days reflects recent sprint activity, whereas a 1-year evaluation reflects long-term sustainability.
                         </li>
                         <li class="mb-2">
-                            <strong>Analytical Heuristics:</strong> Health scores and categories (Excellent, Good, Moderate, At Risk) are defined by OpenSourceLens for comparative analytics. They are diagnostic indicators, not universal software quality verdicts.
+                            <strong>Contributor Concentration Boundaries:</strong> Contributor rankings and Herfindahl-Hirschman Index (HHI) concentration scores evaluate the top 30 recorded contributors returned by the GitHub API.
                         </li>
                         <li class="mb-2">
                             <strong>Data Privacy:</strong> OpenSourceLens exclusively ingests public repository metadata. No private repository content, personal passwords, or private keys are collected or stored. Configured GitHub tokens remain strictly server-side.
@@ -218,52 +515,69 @@ Analysis Service (Orchestration & Caching Layer)
                     </ul>
                 </div>
 
-                <!-- OST Syllabus Mapping (Section 49) -->
-                <div class="card border shadow-xs p-4 mb-4">
-                    <h2 class="h5 fw-bold text-dark mb-3 d-flex align-items-center gap-2">
+                <!-- SECTION 8: OST SYLLABUS MAPPING (Phase 10) -->
+                <div id="sec-syllabus" class="card border shadow-xs p-4 mb-4 bg-white">
+                    <h2 class="h5 fw-bold text-dark mb-2 d-flex align-items-center gap-2">
                         <i class="bi bi-mortarboard text-primary"></i>
                         Open Source Technologies (OST) Syllabus Mapping
                     </h2>
+                    <p class="text-secondary small mb-3">
+                        This project directly implements core concepts taught throughout the Open Source Technologies engineering coursework:
+                    </p>
                     <div class="table-responsive">
                         <table class="table table-sm table-hover align-middle mb-0">
                             <thead class="table-light">
-                                <tr class="text-muted extra-small">
-                                    <th style="width: 250px;">OST Concept / Topic</th>
+                                <tr class="text-muted extra-small font-monospace text-uppercase">
+                                    <th style="width: 220px;">OST Concept / Topic</th>
                                     <th>OpenSourceLens Practical Implementation</th>
+                                    <th style="width: 200px;">Academic Demonstration</th>
                                 </tr>
                             </thead>
-                            <tbody class="small">
+                            <tbody class="extra-small">
                                 <tr>
-                                    <td class="fw-semibold font-monospace">Git Version Control</td>
-                                    <td class="text-secondary">Commit history tracking, author attribution, SHA references, branch tracking, and push cadence analysis.</td>
+                                    <td class="fw-semibold font-monospace">1. Git Version Control</td>
+                                    <td class="text-secondary">Commit history tracking, SHA references, author attribution, push cadence, branch workflows.</td>
+                                    <td class="text-muted">Distributed source code control and repository maintenance.</td>
                                 </tr>
                                 <tr>
-                                    <td class="fw-semibold font-monospace">GitHub & Public Ecosystem</td>
-                                    <td class="text-secondary">GitHub REST API v3 integration, authenticated sessions, rate limit handling, and pagination engines.</td>
+                                    <td class="fw-semibold font-monospace">2. GitHub REST Ecosystem</td>
+                                    <td class="text-secondary">GitHub REST API v3 integration, authenticated sessions, rate-limit awareness, pagination.</td>
+                                    <td class="text-muted">Open-source ecosystem tooling and programmatic API consumption.</td>
                                 </tr>
                                 <tr>
-                                    <td class="fw-semibold font-monospace">Django Web Framework</td>
-                                    <td class="text-secondary">MTV (Model-Template-View) pattern, service layer architecture, URL routing, forms validation, and template engine.</td>
+                                    <td class="fw-semibold font-monospace">3. Django Web Framework</td>
+                                    <td class="text-secondary">MTV (Model-Template-View) pattern, service layer architecture, URL routing, CSRF forms validation.</td>
+                                    <td class="text-muted">Enterprise backend web development in open-source Python.</td>
                                 </tr>
                                 <tr>
-                                    <td class="fw-semibold font-monospace">PostgreSQL Relational DB</td>
-                                    <td class="text-secondary">Normalized relational schema, foreign key constraints, indexes, unique constraints, and atomic transactions.</td>
+                                    <td class="fw-semibold font-monospace">4. PostgreSQL Database</td>
+                                    <td class="text-secondary">Normalized relational schema, foreign key constraints, indexes, unique constraints, atomic transactions.</td>
+                                    <td class="text-muted">Relational database design, query optimization, and ACID compliance.</td>
                                 </tr>
                                 <tr>
-                                    <td class="fw-semibold font-monospace">Pandas Data Processing</td>
-                                    <td class="text-secondary">DataFrame statistical aggregation, time-series binning, language byte distributions, median resolution times, and HHI calculations.</td>
+                                    <td class="fw-semibold font-monospace">5. Pandas Data Processing</td>
+                                    <td class="text-secondary">DataFrame statistical aggregation, time-series binning, quantile medians, HHI maintainer concentration.</td>
+                                    <td class="text-muted">Open-source data science and statistical computing.</td>
                                 </tr>
                                 <tr>
-                                    <td class="fw-semibold font-monospace">Frontend Web Technologies</td>
-                                    <td class="text-secondary">Semantic HTML5, CSS3 design tokens, responsive Bootstrap 5 grid, Chart.js visualizations, and asynchronous DOM updates.</td>
+                                    <td class="fw-semibold font-monospace">6. Frontend Design System</td>
+                                    <td class="text-secondary">Semantic HTML5, CSS custom properties, responsive Bootstrap 5 grid, Chart.js visual telemetry.</td>
+                                    <td class="text-muted">Accessible, modern developer tooling aesthetics and data visualization.</td>
                                 </tr>
                                 <tr>
-                                    <td class="fw-semibold font-monospace">CRUD & Persistence</td>
-                                    <td class="text-secondary">Repository data synchronization, atomic snapshot persistence, catalog history querying, and stale record management.</td>
+                                    <td class="fw-semibold font-monospace">7. CRUD & Snapshot Lifecycle</td>
+                                    <td class="text-secondary">Repository data synchronization, atomic snapshot persistence, catalog history querying, entity pruning.</td>
+                                    <td class="text-muted">State management, data lifecycle, and historical auditability.</td>
                                 </tr>
                                 <tr>
-                                    <td class="fw-semibold font-monospace">Software Testing & QA</td>
-                                    <td class="text-secondary">Automated Django unit test suite with mocked external HTTP interactions, database independence, and edge-case validation.</td>
+                                    <td class="fw-semibold font-monospace">8. Automated Software QA</td>
+                                    <td class="text-secondary">Django automated unit and regression test suite with mocked external HTTP interactions.</td>
+                                    <td class="text-muted">Software testing methodology, mock isolation, and regression prevention.</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-semibold font-monospace">9. Open Source Licensing</td>
+                                    <td class="text-secondary">SPDX license validation, metadata hygiene checks, MIT License distribution.</td>
+                                    <td class="text-muted">Open-source governance, intellectual property, and licensing compliance.</td>
                                 </tr>
                             </tbody>
                         </table>

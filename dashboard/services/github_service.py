@@ -437,11 +437,20 @@ class GitHubService:
             license_name = data['license'].get('name')
             license_spdx = data['license'].get('spdx_id')
 
+        canonical_full_name = data.get('full_name') or repo_str
+        if '/' in canonical_full_name:
+            c_owner, c_repo = canonical_full_name.split('/', 1)
+        else:
+            c_owner, c_repo = owner, repo
+
         return {
             'id': data.get('id'),
-            'owner': owner,
-            'name': repo,
-            'full_name': data.get('full_name', repo_str),
+            'owner': c_owner,
+            'name': c_repo,
+            'full_name': canonical_full_name,
+            'requested_owner': owner,
+            'requested_name': repo,
+            'requested_full_name': repo_str,
             'description': data.get('description') or '',
             'url': data.get('html_url', f"https://github.com/{repo_str}"),
             'stars': data.get('stargazers_count', 0),
