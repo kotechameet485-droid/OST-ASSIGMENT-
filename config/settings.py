@@ -25,7 +25,13 @@ else:
     if not SECRET_KEY:
         raise ImproperlyConfigured("The SECRET_KEY environment variable must be explicitly configured in production when DEBUG=False.")
 
-ALLOWED_HOSTS = [host.strip() for host in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if host.strip()]
+raw_allowed_hosts = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,.vercel.app')
+ALLOWED_HOSTS = [host.strip() for host in raw_allowed_hosts.split(',') if host.strip()]
+if '.vercel.app' not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append('.vercel.app')
+
+raw_csrf_origins = os.getenv('CSRF_TRUSTED_ORIGINS', 'https://*.vercel.app,http://localhost:8000,http://127.0.0.1:8000')
+CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in raw_csrf_origins.split(',') if origin.strip()]
 
 # Security HTTP headers and cookie flags (Section 37)
 SECURE_CONTENT_TYPE_NOSNIFF = True
@@ -116,14 +122,22 @@ if IS_TESTING or USE_SQLITE or 'sqlite3' in DB_ENGINE:
         }
     }
 elif DATABASE_URL:
-    from urllib.parse import urlparse, unquote
+    from urllib.parse import urlparse, unquote, parse_qs
     parsed_db = urlparse(DATABASE_URL)
     db_engine = 'django.db.backends.postgresql'
+    db_options = {}
     if 'sqlite' in parsed_db.scheme:
         db_engine = 'django.db.backends.sqlite3'
         db_name = parsed_db.path[1:] or str(BASE_DIR / 'db.sqlite3')
     else:
         db_name = unquote(parsed_db.path[1:]) if parsed_db.path else DB_NAME
+        if parsed_db.query:
+            query_params = parse_qs(parsed_db.query)
+            if 'sslmode' in query_params:
+                db_options['sslmode'] = query_params['sslmode'][0]
+        sslmode_env = os.getenv('DB_SSLMODE', '').strip()
+        if sslmode_env:
+            db_options['sslmode'] = sslmode_env
 
     DATABASES = {
         'default': {
@@ -135,7 +149,13 @@ elif DATABASE_URL:
             'PORT': str(parsed_db.port or DB_PORT),
         }
     }
+    if db_options:
+        DATABASES['default']['OPTIONS'] = db_options
 else:
+    db_options = {}
+    sslmode_env = os.getenv('DB_SSLMODE', '').strip()
+    if sslmode_env:
+        db_options['sslmode'] = sslmode_env
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
@@ -146,6 +166,8 @@ else:
             'PORT': DB_PORT,
         }
     }
+    if db_options:
+        DATABASES['default']['OPTIONS'] = db_options
 
 # In-memory caching for repeated API lookups and analysis data
 CACHES = {
@@ -182,6 +204,19 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+try:
+    import whitenoise  # noqa: F401
+    STORAGES = {
+        "default": {
+            "BACKEND": "django.core.files.storage.FileSystemStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+        },
+    }
+except ImportError:
+    pass
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

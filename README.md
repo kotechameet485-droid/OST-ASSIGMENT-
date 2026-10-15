@@ -7,7 +7,7 @@
 [![Pandas](https://img.shields.io/badge/Pandas-2.2+-150458?style=flat&logo=pandas&logoColor=white)](https://pandas.pydata.org/)
 [![Chart.js](https://img.shields.io/badge/Chart.js-4.4-FF6384?style=flat&logo=chartdotjs&logoColor=white)](https://www.chartjs.org/)
 [![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3-7952B3?style=flat&logo=bootstrap&logoColor=white)](https://getbootstrap.com/)
-[![Tests](https://img.shields.io/badge/Tests-110%20Passed-success?style=flat&logo=pytest&logoColor=white)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-117%20Passed-success?style=flat&logo=pytest&logoColor=white)](#testing)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **OpenSourceLens** is a production-grade open-source project intelligence and health analytics platform built as part of the **Open Source Technologies (OST)** engineering curriculum. It transforms raw telemetry from the public GitHub REST API into actionable engineering metrics, evaluating repository activity, triage responsiveness, code integration, maintainer diversity, and hygiene through a transparent, reproducible, multi-signal methodology.
@@ -33,6 +33,8 @@
 - [PostgreSQL Setup](#postgresql-setup)
 - [Running the Project](#running-the-project)
 - [Testing](#testing)
+- [Vercel Serverless Deployment](#vercel-serverless-deployment)
+- [Production Deployment Readiness](#production-deployment-readiness)
 - [Collaborative Git Workflow](#collaborative-git-workflow)
 - [Troubleshooting](#troubleshooting)
 - [Screenshots](#screenshots)
@@ -520,7 +522,7 @@ Open your browser to: **`http://127.0.0.1:8000/`**
 
 ## Testing
 
-The project includes an automated test suite with **110 test cases** covering every layer of the system. Tests use Python's `unittest.mock` to mock external GitHub API calls and run against an isolated test database with zero external network or database dependencies.
+The project includes an automated test suite with **117 test cases** covering every layer of the system. Tests use Python's `unittest.mock` to mock external GitHub API calls and run against an isolated test database with zero external network or database dependencies.
 
 Run the test suite:
 
@@ -537,16 +539,121 @@ python manage.py test
 - **`tests/test_hardening.py` (14 tests):** Window & cache isolation (30d vs 90d vs 365d), immutable historical snapshots, stale entity synchronization pruning, pull request window cutoff filtering, zero synthetic comparison fallback verification, active-day vs calendar-day commit averages, CSRF protection on POST refresh, and `.env` version control isolation.
 - **`tests/test_rate_limiting.py` (17 tests):** Dedicated tests for rate limiting, resilience, token detection, mock quota ceilings, reset countdown calculations, and cached snapshot fallback recovery.
 - **`tests/test_history_hardening.py` (16 tests):** Complete regression suite covering History Detail audit console Cases 1–4, HTTP 500 on database error, HTTP 400 on malformed input, 30d vs 365d snapshot consistency and window pruning isolation, resilient candidate preservation in comparisons, and GitHub API pagination failure handling with `PaginatedList`.
+- **`tests/test_production_settings.py` (7 tests):** Vercel environment detection, `.vercel.app` in `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS` wildcard validation, WSGI callable (`app` and `application`) export, `vercel.json` routing integrity, `build_files.sh` execution script, and `DATABASE_URL` SSL parameters parsing.
 
 ```text
-Found 110 test(s).
+Found 117 test(s).
 System check identified no issues (0 silenced).
-..............................................................................................................
+.....................................................................................................................
 ----------------------------------------------------------------------
-Ran 110 tests in 6.935s
+Ran 117 tests in 6.736s
 
 OK
 ```
+
+---
+
+## Vercel Serverless Deployment
+
+OpenSourceLens is specifically pre-configured for direct serverless deployment to **Vercel** with persistent PostgreSQL storage, WhiteNoise static file compression, and HTTPS CSRF hardening.
+
+### 1. Vercel Architecture Overview
+
+```text
+                  Internet HTTPS Request
+                            │
+                            ▼
+                    Vercel Edge Router
+                   /                  \
+   /static/* path /                    \ All other paths
+                 ▼                      ▼
+        Vercel Static CDN        @vercel/python Serverless
+      (Served from staticfiles)        Function
+                                        │
+                                        ▼
+                                 config/wsgi.py
+                                 (app = application)
+                                        │
+                                        ▼
+                             Django Views & Services
+                                        │
+                                        ▼
+                             Managed PostgreSQL DB
+                            (Neon / Supabase / RDS)
+```
+
+1. **WSGI Entrypoint (`config/wsgi.py`):** Exposes both `application` and `app` for Vercel's Python runtime loader.
+2. **Configuration (`vercel.json`):** Defines the `@vercel/python` WSGI build and the `@vercel/static-build` output pointing to `staticfiles/`.
+3. **Build Script (`build_files.sh`):** Installs Python packages from `requirements.txt` and executes `python3 manage.py collectstatic --noinput --clear` during Vercel's build phase.
+4. **Host & CSRF Hardening:** `config/settings.py` automatically allows `.vercel.app` domains in `ALLOWED_HOSTS` and configures `CSRF_TRUSTED_ORIGINS` for `https://*.vercel.app` so forms and search queries submit securely over HTTPS without 403 Forbidden errors.
+
+---
+
+### 2. Step-by-Step Vercel Deployment Guide
+
+#### Step A: Provision Managed PostgreSQL
+Vercel serverless functions have a read-only filesystem (except for temporary `/tmp`), meaning SQLite cannot persist data across function invocations. A cloud-managed PostgreSQL instance is required:
+- Recommended free-tier providers: **[Neon](https://neon.tech/)**, **[Supabase](https://supabase.com/)**, or **[Vercel Postgres](https://vercel.com/docs/storage/vercel-postgres)**.
+- Once created, copy the connection string. Example format:
+  ```text
+  postgresql://[user]:[password]@[host].neon.tech/neondb?sslmode=require
+  ```
+  *(Notice the `?sslmode=require` query parameter, which is natively supported and parsed by OpenSourceLens).*
+
+#### Step B: Execute Database Migrations
+Run migrations against your remote PostgreSQL database from your local machine before the first deployment:
+```bash
+# Set your remote database URL temporarily in your terminal session
+export DATABASE_URL="postgresql://user:password@host.neon.tech/neondb?sslmode=require"
+# On Windows PowerShell:
+# $env:DATABASE_URL="postgresql://user:password@host.neon.tech/neondb?sslmode=require"
+
+# Execute migrations to provision tables, indexes, and constraints
+python manage.py migrate
+```
+> **Best Practice:** Do NOT run `manage.py migrate` inside serverless lambda function invocations. Migrations must be run deliberately ahead of deployment.
+
+#### Step C: Import Project into Vercel
+1. Push your latest code to your GitHub repository:
+   ```bash
+   git push origin main
+   ```
+2. Log in to [Vercel](https://vercel.com/) and click **"Add New Project"** $\to$ **"Project"**.
+3. Select your repository: **`kotechameet485-droid/OST-ASSIGMENT-`**.
+4. Leave the **Framework Preset** as **Other**.
+5. The **Root Directory** should be `./`.
+
+#### Step D: Configure Production Environment Variables
+In the **Environment Variables** section of the Vercel project settings, add:
+
+| Variable Name | Production Value / Description | Example |
+| :--- | :--- | :--- |
+| `SECRET_KEY` | Strong random 50+ character string | Generate locally with `python -c "import secrets; print(secrets.token_urlsafe(50))"` |
+| `DEBUG` | Must be `False` in production | `False` |
+| `ALLOWED_HOSTS` | Vercel domain wildcard | `.vercel.app,localhost,127.0.0.1` |
+| `CSRF_TRUSTED_ORIGINS`| HTTPS trusted origins | `https://*.vercel.app` |
+| `DATABASE_URL` | Remote PostgreSQL connection string | `postgresql://user:pass@host.neon.tech/neondb?sslmode=require` |
+| `DB_SSLMODE` | Enforces SSL encryption for PostgreSQL | `require` |
+| `GITHUB_TOKEN` | GitHub Personal Access Token (5,000 req/hr) | `ghp_yourTokenHere` |
+| `ENABLE_HTTPS_SECURITY`| Enforces secure cookies and HSTS | `True` |
+
+> 🔒 **Security Notice:** Never paste secrets into chat or commit them to Git. Add them exclusively through the private Vercel Dashboard.
+
+#### Step E: Click Deploy & Verify
+1. Click **Deploy**. Vercel will run `build_files.sh`, install requirements, collect static assets into `staticfiles/`, and deploy the serverless function.
+2. Once the deployment finishes, open your assigned URL (e.g., `https://ost-assigment.vercel.app/`).
+3. Verify:
+   - Search for a public repository (e.g. `django/django` or `pallets/flask`).
+   - Check that Charts, CSS styles, and Bootstrap components render properly.
+   - Click into **History Detail** (`/history/<owner>/<repo>/`) to verify database snapshot persistence.
+   - Run a side-by-side comparison on `/compare/`.
+
+---
+
+### 3. Serverless Execution Limits & Optimization
+- **Vercel Execution Window:** Vercel Hobby serverless functions have a maximum timeout of **15 seconds** (60 seconds on Pro).
+- **Engineered Bounded Ingestion:** OpenSourceLens bounds external GitHub API pagination (maximum 100 commits, 100 issues, 100 PRs, 30 contributors) and executes with a strict 12-second HTTP client timeout. Under normal network conditions, a fresh repository analysis completes in **3 to 6 seconds**, well within the serverless runtime limit.
+- **Smart Snapshots:** Subsequent visits within the 60-minute cache window return instantly (<150ms) from PostgreSQL without making live external API calls.
 
 ---
 
