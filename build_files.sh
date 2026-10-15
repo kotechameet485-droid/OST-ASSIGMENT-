@@ -1,13 +1,11 @@
 #!/bin/bash
-
-# Exit immediately if a command exits with a non-zero status
+# OpenSourceLens Build Script
+# In modern Vercel deployments, Python dependencies are automatically installed from requirements.txt
+# by Vercel's managed Python runtime.
+# Manual package installation is omitted to comply with PEP 668 and prevent 'externally-managed-environment' errors.
 set -e
 
 echo "=== Building OpenSourceLens for Vercel Deployment ==="
-
-# Install project dependencies
-echo "Installing dependencies from requirements.txt..."
-python3 -m pip install -r requirements.txt
 
 # Collect static assets into staticfiles directory
 echo "Collecting static assets..."

@@ -99,7 +99,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
-ASGI_APPLICATION = 'config.asgi.application'
+# ASGI_APPLICATION is omitted to ensure Vercel uses the standard WSGI entrypoint config.wsgi:application
 
 # Database Configuration
 # Primary Production Configuration: PostgreSQL.

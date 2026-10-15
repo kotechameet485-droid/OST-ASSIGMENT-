@@ -1,5 +1,5 @@
 """
-Tests for production settings, Vercel configuration, and deployment readiness.
+Tests for production settings, modern Vercel configuration, and deployment readiness.
 Verifies:
   - Vercel domain handling in ALLOWED_HOSTS (.vercel.app wildcard support)
   - CSRF_TRUSTED_ORIGINS configuration for Vercel HTTPS preview/production URLs
@@ -7,7 +7,9 @@ Verifies:
   - DATABASE_URL parsing with SSL options
   - Staticfiles and WhiteNoise storage configuration
   - WSGI callable 'app' and 'application' export for Vercel
-  - vercel.json and build_files.sh configuration integrity
+  - vercel.json modern functions configuration (no deprecated builds)
+  - build_files.sh PEP 668 compliance (no manual pip install)
+  - pyproject.toml Vercel entrypoint declaration
 """
 
 import os
@@ -38,32 +40,44 @@ class VercelConfigurationTests(SimpleTestCase):
         self.assertTrue(hasattr(wsgi_module, 'app'), "config.wsgi must export 'app' for Vercel")
         self.assertIs(wsgi_module.app, wsgi_module.application)
 
-    def test_vercel_json_valid_json_and_routes(self):
-        """vercel.json must exist, be valid JSON, and configure both WSGI build and static routes."""
+    def test_wsgi_application_setting_matches(self):
+        """WSGI_APPLICATION setting must resolve to config.wsgi.application."""
+        self.assertEqual(settings.WSGI_APPLICATION, 'config.wsgi.application')
+
+    def test_vercel_json_modern_functions_config(self):
+        """vercel.json must exist, be valid JSON, configure functions, and avoid deprecated builds."""
         vercel_json_path = settings.BASE_DIR / 'vercel.json'
         self.assertTrue(vercel_json_path.exists(), "vercel.json must exist in project root")
 
         with open(vercel_json_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
 
-        self.assertEqual(data.get('version'), 2)
-        builds = data.get('builds', [])
-        srcs = [b.get('src') for b in builds]
-        self.assertIn('config/wsgi.py', srcs)
-        self.assertIn('build_files.sh', srcs)
+        # Must not contain legacy builds array which triggers deprecation warnings and disables framework detection
+        self.assertNotIn('builds', data, "vercel.json must not use legacy 'builds' array")
 
-        routes = data.get('routes', [])
-        route_dests = [r.get('dest') for r in routes]
-        self.assertIn('config/wsgi.py', route_dests)
+        # Must configure functions for WSGI entrypoint
+        functions = data.get('functions', {})
+        self.assertIn('config/wsgi.py', functions, "vercel.json must configure config/wsgi.py in functions")
+        self.assertGreaterEqual(functions['config/wsgi.py'].get('maxDuration', 0), 15)
 
-    def test_build_files_sh_exists_and_contains_commands(self):
-        """build_files.sh must exist and contain pip install and collectstatic commands."""
+    def test_build_files_sh_no_manual_pip_install(self):
+        """build_files.sh must contain collectstatic and omit manual pip install for PEP 668 compliance."""
         build_script_path = settings.BASE_DIR / 'build_files.sh'
         self.assertTrue(build_script_path.exists(), "build_files.sh must exist in project root")
 
         content = build_script_path.read_text(encoding='utf-8')
-        self.assertIn('requirements.txt', content)
         self.assertIn('collectstatic', content)
+        # Verify manual pip install is NOT present to prevent externally-managed-environment errors
+        self.assertNotIn('pip install', content, "build_files.sh must not contain manual pip install")
+
+    def test_pyproject_toml_vercel_entrypoint(self):
+        """pyproject.toml must declare tool.vercel.entrypoint to point directly to config.wsgi:application."""
+        pyproject_path = settings.BASE_DIR / 'pyproject.toml'
+        self.assertTrue(pyproject_path.exists(), "pyproject.toml must exist in project root")
+
+        content = pyproject_path.read_text(encoding='utf-8')
+        self.assertIn('tool.vercel', content)
+        self.assertIn('config.wsgi:application', content)
 
     def test_database_url_ssl_parsing_logic(self):
         """DATABASE_URL with sslmode=require must parse cleanly into engine options."""
