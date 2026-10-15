@@ -62,6 +62,28 @@
             </div>
         </div>
 
+        {% if failed_candidates %}
+            <div class="alert alert-warning border shadow-xs mb-4">
+                <div class="d-flex align-items-center gap-2 fw-semibold text-dark mb-1">
+                    <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+                    <span>Telemetry Notice: Some requested repositories could not be analyzed</span>
+                </div>
+                <div class="extra-small text-secondary mb-3">
+                    The requested repositories below encountered issues during retrieval. They are excluded from the comparison matrix, and no fake or synthetic metrics have been generated.
+                </div>
+                <div class="row g-2">
+                    {% for fc in failed_candidates %}
+                        <div class="col-md-4">
+                            <div class="p-2 border rounded bg-white">
+                                <div class="fw-bold text-dark font-monospace small">{{ fc.name|default:fc.raw }}</div>
+                                <div class="text-danger extra-small mt-1">{{ fc.error }}</div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+
         {% if comparison %}
             <!-- Visual Grouped Comparison Chart Card (Section 29) -->
             <div class="card border shadow-sm p-4 mb-4">
@@ -95,9 +117,23 @@
                                     <th class="text-center font-monospace">
                                         <div class="fw-bold text-dark">{{ r.name }}</div>
                                         <div class="my-1">
-                                            <span class="badge bg-success-subtle text-success border border-success-subtle extra-small font-monospace" title="Full analysis pipeline executed; no synthetic fallbacks">
-                                                <i class="bi bi-check-circle-fill me-1"></i>Complete Analysis
-                                            </span>
+                                            {% if r.completeness_status == 'Complete' or r.status_label == 'Complete' %}
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle extra-small font-monospace" title="Full analysis pipeline executed; no synthetic fallbacks">
+                                                    <i class="bi bi-check-circle-fill me-1"></i>Complete
+                                                </span>
+                                            {% elif r.completeness_status == 'Cached' %}
+                                                <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle extra-small font-monospace" title="Loaded from stored database snapshot">
+                                                    <i class="bi bi-database me-1"></i>Cached
+                                                </span>
+                                            {% elif r.completeness_status == 'Degraded' %}
+                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle extra-small font-monospace" title="One or more telemetry streams failed">
+                                                    <i class="bi bi-exclamation-triangle-fill me-1"></i>Degraded
+                                                </span>
+                                            {% else %}
+                                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle extra-small font-monospace" title="Partial sample or capped telemetry">
+                                                    <i class="bi bi-exclamation-circle-fill me-1"></i>Partial
+                                                </span>
+                                            {% endif %}
                                         </div>
                                         <a href="{% url 'analyze' %}?repo={{ r.name }}&window={{ r.analysis_window }}" class="extra-small text-decoration-none text-primary">
                                             View Dashboard <i class="bi bi-arrow-right"></i>
@@ -320,12 +356,19 @@
                 </div>
             </div>
         {% elif candidates %}
-            <div class="alert alert-warning border shadow-xs d-flex align-items-center gap-3 p-4">
-                <i class="bi bi-exclamation-triangle-fill fs-3 text-warning"></i>
-                <div>
-                    <h4 class="h6 fw-bold text-dark mb-1">Insufficient Comparison Input</h4>
-                    <p class="small text-secondary mb-2">
-                        Please provide at least two valid public GitHub repositories (e.g. <code>facebook/react</code> and <code>vuejs/core</code>) to generate side-by-side comparative telemetry.
+            <div class="alert alert-warning border shadow-xs d-flex align-items-start gap-3 p-4">
+                <i class="bi bi-exclamation-triangle-fill fs-3 text-warning flex-shrink-0"></i>
+                <div class="flex-grow-1">
+                    <h4 class="h6 fw-bold text-dark mb-1">Insufficient Comparison Telemetry</h4>
+                    <p class="small text-secondary mb-3">
+                        Comparison requires at least two successfully analyzed repositories under the same time scope.
+                        {% if success_count == 1 %}
+                            Only 1 repository was successfully loaded.
+                        {% elif success_count == 0 and failed_candidates %}
+                            None of the requested repositories could be retrieved from GitHub.
+                        {% else %}
+                            Please provide at least two valid public GitHub repositories (e.g. <code>facebook/react</code> and <code>vuejs/core</code>) to generate side-by-side comparative telemetry.
+                        {% endif %}
                     </p>
                     <a href="{% url 'compare' %}?repo1=facebook/react&repo2=vuejs/core&window=90d" class="btn btn-sm os-btn-primary">
                         Load Sample Comparison (React vs Vue)

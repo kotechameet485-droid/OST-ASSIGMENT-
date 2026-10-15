@@ -12,6 +12,7 @@
         initSampleButtons();
         initKeyboardShortcuts();
         initTooltips();
+        initScrollSpy();
     });
 
     /**
@@ -103,12 +104,19 @@
         });
     }
 
+    var loadingIntervalId = null;
+
     /**
      * Cycles informative pipeline status messages without claiming premature completion.
      */
     function initLoadingStatusCycler() {
         var statusEl = document.getElementById('loadingStatusText');
         if (!statusEl) return;
+
+        if (loadingIntervalId) {
+            clearInterval(loadingIntervalId);
+            loadingIntervalId = null;
+        }
 
         var messages = [
             'Connecting to GitHub REST API and validating endpoints...',
@@ -119,7 +127,7 @@
         ];
 
         var index = 0;
-        setInterval(function () {
+        loadingIntervalId = setInterval(function () {
             index = (index + 1) % messages.length;
             if (statusEl) {
                 statusEl.textContent = messages[index];
@@ -170,6 +178,63 @@
                 }
             }
         });
+    }
+
+    /**
+     * Functional ScrollSpy for dashboard sticky section subnavigation.
+     * Keeps active subnav link synchronized with the currently visible section.
+     */
+    function initScrollSpy() {
+        var subnav = document.querySelector('.os-sticky-subnav');
+        if (!subnav) return;
+
+        var navLinks = subnav.querySelectorAll('.os-subnav-link');
+        var sections = [];
+
+        navLinks.forEach(function (link) {
+            var href = link.getAttribute('href');
+            if (href && href.startsWith('#sec-')) {
+                var sec = document.querySelector(href);
+                if (sec) {
+                    sections.push({ el: sec, link: link, id: href });
+                }
+            }
+        });
+
+        if (!sections.length) return;
+
+        var isTicking = false;
+
+        function updateActiveSection() {
+            var scrollPos = window.pageYOffset || document.documentElement.scrollTop;
+            var offset = 140; // account for sticky header and subnav height
+            var currentActive = sections[0];
+
+            for (var i = 0; i < sections.length; i++) {
+                var top = sections[i].el.offsetTop - offset;
+                if (scrollPos >= top) {
+                    currentActive = sections[i];
+                }
+            }
+
+            navLinks.forEach(function (link) {
+                link.classList.remove('active');
+            });
+            if (currentActive && currentActive.link) {
+                currentActive.link.classList.add('active');
+            }
+            isTicking = false;
+        }
+
+        window.addEventListener('scroll', function () {
+            if (!isTicking) {
+                window.requestAnimationFrame(updateActiveSection);
+                isTicking = true;
+            }
+        }, { passive: true });
+
+        // Update on load
+        updateActiveSection();
     }
 
     /**

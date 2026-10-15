@@ -369,3 +369,210 @@ class DatabaseConsistencyTests(TestCase):
             'sqlite3' in db_config['ENGINE'] or 'postgresql' in db_config['ENGINE'],
             f"Unexpected database engine: {db_config['ENGINE']}"
         )
+
+
+class HistoryDetailErrorAndValidationTests(TestCase):
+    """Verifies robust HTTP error handling and input validation for history detail view."""
+
+    def setUp(self):
+        self.client = Client()
+
+    @patch('dashboard.views.RepositoryService.get_history_detail')
+    def test_database_error_returns_500_not_404(self, mock_get_history):
+        """Genuine database failures must return HTTP 500 and not be misreported as missing history (404)."""
+        from django.db import OperationalError
+        mock_get_history.side_effect = OperationalError("Database connection lost")
+
+        response = self.client.get(reverse('history_detail', kwargs={'owner': 'facebook', 'repo': 'react'}))
+        self.assertEqual(response.status_code, 500)
+        self.assertTemplateUsed(response, 'errors/500.html')
+
+    def test_malformed_repository_identity_returns_400(self):
+        """Malformed or invalid repository identifiers must return HTTP 400 Bad Request."""
+        response = self.client.get(reverse('history_detail', kwargs={'owner': 'facebook space', 'repo': 'react'}))
+        self.assertEqual(response.status_code, 400)
+        self.assertTemplateUsed(response, 'errors/400.html')
+
+
+class SnapshotConsistencyAndWindowIsolationTests(TestCase):
+    """Verifies that 30d analysis never purges commit/issue/PR records needed for 365d snapshots."""
+
+    def setUp(self):
+        self.now = datetime.now(timezone.utc)
+        self.repo = Repository.objects.create(
+            owner='isolation',
+            name='window-test',
+            full_name='isolation/window-test',
+            url='https://github.com/isolation/window-test',
+            stars=100,
+            forks=10,
+            open_issues=5,
+            default_branch='main',
+            created_at=self.now,
+            updated_at=self.now,
+        )
+
+    @patch('dashboard.services.analysis_service.GitHubService')
+    def test_365d_followed_by_30d_preserves_older_telemetry(self, MockGitHubService):
+        """
+        Analyzing for 365d creates historical commit/issue records.
+        A subsequent analysis for 30d must NOT delete records older than 30 days!
+        """
+        mock_gh = MockGitHubService.return_value
+        mock_gh.token = 'test-token'
+        mock_gh.get_repository.return_value = {
+            'owner': 'isolation',
+            'name': 'window-test',
+            'full_name': 'isolation/window-test',
+            'stars': 100,
+            'forks': 10,
+            'watchers': 10,
+            'open_issues': 5,
+            'created_at': (self.now - timedelta(days=400)).isoformat(),
+            'updated_at': self.now.isoformat(),
+            'pushed_at': self.now.isoformat(),
+            'default_branch': 'main',
+            'license': 'MIT',
+            'language': 'Python',
+        }
+        mock_gh.get_languages.return_value = {'Python': 50000}
+        mock_gh.get_contributors.return_value = [{'username': 'lead', 'contributions': 50, 'avatar_url': '', 'profile_url': ''}]
+
+        from dashboard.models import CommitActivity, Issue, PullRequest
+        from dashboard.services.github_service import PaginatedList
+
+        # 1. First run: 365d with commits and issues 200 days ago
+        old_date = (self.now - timedelta(days=200)).strftime('%Y-%m-%d')
+        old_dt = (self.now - timedelta(days=200)).isoformat()
+        recent_date = (self.now - timedelta(days=5)).strftime('%Y-%m-%d')
+        recent_dt = (self.now - timedelta(days=5)).isoformat()
+
+        mock_gh.get_commits.return_value = PaginatedList([
+            {'sha': 'old001', 'date': f"{old_date}T10:00:00Z", 'message': 'old commit', 'author': 'lead'},
+            {'sha': 'rec001', 'date': f"{recent_date}T10:00:00Z", 'message': 'recent commit', 'author': 'lead'},
+        ])
+        mock_gh.get_issues.return_value = PaginatedList([
+            {'issue_number': 101, 'title': 'old issue', 'state': 'closed', 'created_at': old_dt, 'closed_at': old_dt},
+            {'issue_number': 102, 'title': 'recent issue', 'state': 'open', 'created_at': recent_dt, 'closed_at': None},
+        ])
+        mock_gh.get_pull_requests.return_value = PaginatedList([
+            {'pr_number': 201, 'title': 'old pr', 'state': 'merged', 'created_at': old_dt, 'closed_at': old_dt, 'merged_at': old_dt},
+            {'pr_number': 202, 'title': 'recent pr', 'state': 'merged', 'created_at': recent_dt, 'closed_at': recent_dt, 'merged_at': recent_dt},
+        ])
+
+        service = AnalysisService()
+        service.run_analysis('isolation', 'window-test', window='365d', force_refresh=True)
+
+        self.assertEqual(CommitActivity.objects.filter(repository=self.repo).count(), 2)
+        self.assertEqual(Issue.objects.filter(repository=self.repo).count(), 2)
+        self.assertEqual(PullRequest.objects.filter(repository=self.repo).count(), 2)
+
+        # 2. Second run: 30d window with only recent items
+        mock_gh.get_commits.return_value = PaginatedList([
+            {'sha': 'rec001', 'date': f"{recent_date}T10:00:00Z", 'message': 'recent commit', 'author': 'lead'}
+        ])
+        mock_gh.get_issues.return_value = PaginatedList([
+            {'issue_number': 102, 'title': 'recent issue', 'state': 'open', 'created_at': recent_dt, 'closed_at': None}
+        ])
+        mock_gh.get_pull_requests.return_value = PaginatedList([
+            {'pr_number': 202, 'title': 'recent pr', 'state': 'merged', 'created_at': recent_dt, 'closed_at': recent_dt, 'merged_at': recent_dt}
+        ])
+
+        service.run_analysis('isolation', 'window-test', window='30d', force_refresh=True)
+
+        # 3. VERIFY: The older records (>30 days ago) must STILL exist!
+        self.assertEqual(
+            CommitActivity.objects.filter(repository=self.repo).count(),
+            2,
+            "A 30-day analysis must not delete older CommitActivity records outside its window."
+        )
+        self.assertTrue(
+            Issue.objects.filter(repository=self.repo, issue_number=101).exists(),
+            "Older issues must not be wiped by a smaller analysis window."
+        )
+        self.assertTrue(
+            PullRequest.objects.filter(repository=self.repo, pr_number=201).exists(),
+            "Older pull requests must not be wiped by a smaller analysis window."
+        )
+
+
+class ComparisonResilienceAndCandidateTests(TestCase):
+    """Verifies that comparison preserves all requested candidates and truthful status."""
+
+    @patch('dashboard.services.analysis_service.GitHubService')
+    def test_compare_one_fails_one_succeeds_preserves_failed_candidate(self, MockGitHubService):
+        """When 1 of 2 candidates fails (e.g. 404), the failure reason must be captured and returned."""
+        mock_gh = MockGitHubService.return_value
+        now = datetime.now(timezone.utc)
+
+        def mock_get_repo(owner, repo):
+            if repo == 'missing':
+                raise GitHubRepoNotFoundError(f"Repository {owner}/{repo} not found")
+            return {
+                'owner': owner,
+                'name': repo,
+                'full_name': f"{owner}/{repo}",
+                'stars': 100,
+                'forks': 20,
+                'watchers': 20,
+                'open_issues': 5,
+                'created_at': now.isoformat(),
+                'updated_at': now.isoformat(),
+                'pushed_at': now.isoformat(),
+                'default_branch': 'main',
+                'license': 'MIT',
+                'language': 'Python',
+            }
+
+        mock_gh.get_repository.side_effect = mock_get_repo
+        mock_gh.get_languages.return_value = {'Python': 1000}
+        mock_gh.get_contributors.return_value = [{'username': 'dev', 'contributions': 5, 'avatar_url': '', 'profile_url': ''}]
+        mock_gh.get_commits.return_value = [{'sha': 'c1', 'date': now.isoformat(), 'message': 'msg', 'author': 'dev'}]
+        mock_gh.get_issues.return_value = []
+        mock_gh.get_pull_requests.return_value = []
+
+        comp_data = RepositoryService.compare_repositories(['valid/repo', 'invalid/missing'], window='90d')
+
+        self.assertIsNotNone(comp_data)
+        self.assertEqual(comp_data['success_count'], 1)
+        self.assertEqual(comp_data['failed_count'], 1)
+        self.assertEqual(len(comp_data['failed_candidates']), 1)
+        self.assertEqual(comp_data['failed_candidates'][0]['status'], 'not_found')
+        self.assertIn('not found', comp_data['failed_candidates'][0]['error'])
+
+
+class GitHubPaginationFailureHandlingTests(TestCase):
+    """Verifies that pagination errors on later pages produce partial results, not silent success or total crashes."""
+
+    @patch('requests.Session.get')
+    def test_pagination_failure_on_page_2_marks_is_partial(self, mock_get):
+        """Page 1 returns 200 with 100 items and a Link header for page 2; page 2 returns 500."""
+        from unittest.mock import Mock
+
+        # Response 1: 100 commits with a Link next header
+        resp1 = Mock()
+        resp1.status_code = 200
+        resp1.json.return_value = [{'sha': f'sha{i}', 'commit': {'message': f'm{i}', 'author': {'date': '2026-01-01T00:00:00Z', 'name': 'dev'}}} for i in range(100)]
+        resp1.headers = {
+            'Link': '<https://api.github.com/repos/org/repo/commits?page=2>; rel="next"',
+            'X-RateLimit-Limit': '5000',
+            'X-RateLimit-Remaining': '4900',
+        }
+
+        # Response 2: HTTP 500 error on page 2
+        resp2 = Mock()
+        resp2.status_code = 500
+        resp2.json.return_value = {'message': 'Internal Server Error'}
+        resp2.headers = {}
+
+        mock_get.side_effect = [resp1, resp2, resp2, resp2]
+
+        gh = GitHubService(token='dummy')
+        results = gh.get_commits('org', 'repo', limit=200)
+
+        # Must return the 100 items from page 1 and report partial
+        self.assertEqual(len(results), 100)
+        self.assertTrue(results.is_partial)
+        self.assertEqual(results.status, 'partial')
+        self.assertIsNotNone(results.error)
+

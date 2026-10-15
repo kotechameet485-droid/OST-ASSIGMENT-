@@ -111,7 +111,12 @@ class AnalysisService:
         logger.info(f"Ingesting fresh data from GitHub for {full_name} (Window: {window})")
         try:
             repo_data = self.github_service.get_repository(owner, repo_name)
-            languages_raw = self.github_service.get_languages(owner, repo_name)
+            try:
+                languages_raw = self.github_service.get_languages(owner, repo_name)
+            except Exception as lang_err:
+                logger.warning(f"Optional languages fetch failed for {full_name}: {lang_err}")
+                languages_raw = None
+
             contributors_raw = self.github_service.get_contributors(owner, repo_name, limit=30)
             commits_raw = self.github_service.get_commits(owner, repo_name, limit=100, since=cutoff_iso)
             issues_raw = self.github_service.get_issues(owner, repo_name, limit=100, since=cutoff_iso)
@@ -141,9 +146,22 @@ class AnalysisService:
             # If no stored snapshot exists for this repository and window, propagate the exception
             raise
 
+        # Track stream collection status
+        commits_status = getattr(commits_raw, 'status', 'complete')
+        issues_status = getattr(issues_raw, 'status', 'complete')
+        prs_status = getattr(prs_raw, 'status', 'complete')
+        contribs_status = getattr(contributors_raw, 'status', 'complete')
+        if languages_raw is None:
+            languages_status = 'unavailable'
+        elif len(languages_raw) == 0:
+            languages_status = 'zero_records'
+        else:
+            languages_status = 'complete'
+
         # Step 2: Run Pandas Analytics & Health Scoring
-        language_stats = AnalyticsEngine.calculate_language_statistics(languages_raw)
-        language_dist = AnalyticsEngine.calculate_language_distribution(languages_raw)
+        languages_dict_for_calc = languages_raw if languages_raw is not None else {}
+        language_stats = AnalyticsEngine.calculate_language_statistics(languages_dict_for_calc)
+        language_dist = AnalyticsEngine.calculate_language_distribution(languages_dict_for_calc)
         commit_stats = AnalyticsEngine.calculate_commit_statistics(commits_raw, analysis_window=window)
         issue_stats = AnalyticsEngine.calculate_issue_statistics(
             issues_raw,
@@ -162,26 +180,22 @@ class AnalysisService:
             contrib_stats=contributor_stats,
         )
 
-        coverage_summary = {
-            'window': window,
-            'analysis_window': window,
-            'window_label': window_label,
-            'commits_analyzed': commit_stats['total_analyzed'],
-            'issues_analyzed': issue_stats['total_analyzed'],
-            'prs_analyzed': pr_stats['total_analyzed'],
-            'contributors_recorded': contributor_stats['total_recorded'],
-            'contributors_analyzed': contributor_stats['total_recorded'],
-            'sample_limits': {
-                'commits': 100,
-                'issues': 100,
-                'prs': 100,
-                'contributors': 30,
-            },
-            'github_api_authenticated': bool(self.github_service.token),
-            'github_api_limit': 5000 if self.github_service.token else 60,
-            'source': 'GitHub REST API',
-            'generated_at': datetime.now(timezone.utc).isoformat(),
-        }
+        coverage_summary = self._build_coverage_payload(
+            window=window,
+            commits_count=commit_stats['total_analyzed'],
+            issues_count=issue_stats['total_analyzed'],
+            prs_count=pr_stats['total_analyzed'],
+            contribs_count=contributor_stats['total_recorded'],
+            languages_count=len(language_stats),
+            window_label=window_label,
+            generated_at=datetime.now(timezone.utc).isoformat(),
+            reused_from_cache=False,
+            commits_status=commits_status,
+            issues_status=issues_status,
+            prs_status=prs_status,
+            contribs_status=contribs_status,
+            languages_status=languages_status,
+        )
 
         # Step 3: Compute trend and assemble initial dashboard payload
         past_analyses = db_repo.analyses.order_by('analyzed_at') if db_repo else RepositoryAnalysis.objects.none()
@@ -221,6 +235,7 @@ class AnalysisService:
             coverage_summary=coverage_summary,
             window=window,
             snapshot_payload=dashboard_payload,
+            languages_raw=languages_raw,
         )
 
         # Step 5: Refresh Historical Trend with the freshly saved snapshot
@@ -257,6 +272,7 @@ class AnalysisService:
         coverage_summary: Dict[str, Any],
         window: str,
         snapshot_payload: Optional[Dict[str, Any]] = None,
+        languages_raw: Optional[Any] = None,
     ) -> Repository:
         """
         Synchronizes all repository entities inside an isolated atomic database transaction.
@@ -299,35 +315,39 @@ class AnalysisService:
                 }
             )
 
-            # Synchronize languages: delete stale, create fresh
-            Language.objects.filter(repository=repo_obj).delete()
-            languages_to_create = [
-                Language(
-                    repository=repo_obj,
-                    language=lang['language'],
-                    bytes=lang['bytes'],
-                    percentage=lang['percentage'],
-                )
-                for lang in language_stats
-            ]
-            Language.objects.bulk_create(languages_to_create)
-
-            # Synchronize top contributors: update existing, remove stale
-            if contributors_raw is not None:
-                active_usernames = {c['username'] for c in contributors_raw if c.get('username')}
-                Contributor.objects.filter(repository=repo_obj).exclude(username__in=active_usernames).delete()
-                for c in contributors_raw:
-                    Contributor.objects.update_or_create(
+            # Synchronize languages: delete stale, create fresh only if fresh data was fetched
+            if languages_raw is not None:
+                Language.objects.filter(repository=repo_obj).delete()
+                languages_to_create = [
+                    Language(
                         repository=repo_obj,
-                        username=c['username'],
-                        defaults={
-                            'contributions': c.get('contributions', 0),
-                            'avatar_url': c.get('avatar_url'),
-                            'profile_url': c.get('profile_url'),
-                        }
+                        language=lang['language'],
+                        bytes=lang['bytes'],
+                        percentage=lang['percentage'],
                     )
+                    for lang in language_stats
+                ]
+                Language.objects.bulk_create(languages_to_create)
 
-            # Synchronize commit activities: clean up stale days outside the window
+            # Synchronize top contributors: update existing
+            if contributors_raw is not None:
+                for c in contributors_raw:
+                    if c.get('username'):
+                        Contributor.objects.update_or_create(
+                            repository=repo_obj,
+                            username=c['username'],
+                            defaults={
+                                'contributions': c.get('contributions', 0),
+                                'avatar_url': c.get('avatar_url'),
+                                'profile_url': c.get('profile_url'),
+                            }
+                        )
+
+            # Calculate window cutoff for entity synchronization
+            cutoff_dt, _ = self._get_window_cutoff(window)
+            cutoff_date = cutoff_dt.date()
+
+            # Synchronize commit activities: clean up stale days inside the current window ONLY
             if commits_raw is not None:
                 daily_counts = {}
                 for c in commits_raw:
@@ -345,16 +365,27 @@ class AnalysisService:
                             date=p_date,
                             defaults={'commit_count': cnt}
                         )
-                CommitActivity.objects.filter(repository=repo_obj).exclude(date__in=current_dates).delete()
+                # Only prune dates within the analyzed window if sample is not partial and not capped
+                is_commits_capped = len(commits_raw) >= 100 or getattr(commits_raw, 'is_partial', False)
+                if not is_commits_capped:
+                    CommitActivity.objects.filter(
+                        repository=repo_obj,
+                        date__gte=cutoff_date
+                    ).exclude(date__in=current_dates).delete()
 
-            # Synchronize issues: update/create current, and remove stale issues not present in current analysis
+            # Synchronize issues: update/create current, and only prune within the analyzed window
             if issues_raw is not None:
                 current_issue_numbers = {
                     (iss.get('issue_number') or iss.get('number'))
                     for iss in issues_raw
                     if (iss.get('issue_number') or iss.get('number')) is not None
                 }
-                Issue.objects.filter(repository=repo_obj).exclude(issue_number__in=current_issue_numbers).delete()
+                is_issues_capped = len(issues_raw) >= 100 or getattr(issues_raw, 'is_partial', False)
+                if not is_issues_capped:
+                    Issue.objects.filter(
+                        repository=repo_obj,
+                        created_at__gte=cutoff_dt
+                    ).exclude(issue_number__in=current_issue_numbers).delete()
                 for iss in issues_raw:
                     i_num = iss.get('issue_number') or iss.get('number')
                     if not i_num:
@@ -372,14 +403,19 @@ class AnalysisService:
                         }
                     )
 
-            # Synchronize pull requests: update/create current, and remove stale PRs not in current analysis
+            # Synchronize pull requests: update/create current, and only prune within the analyzed window
             if prs_raw is not None:
                 current_pr_numbers = {
                     (pr.get('pr_number') or pr.get('number'))
                     for pr in prs_raw
                     if (pr.get('pr_number') or pr.get('number')) is not None
                 }
-                PullRequest.objects.filter(repository=repo_obj).exclude(pr_number__in=current_pr_numbers).delete()
+                is_prs_capped = len(prs_raw) >= 100 or getattr(prs_raw, 'is_partial', False)
+                if not is_prs_capped:
+                    PullRequest.objects.filter(
+                        repository=repo_obj,
+                        created_at__gte=cutoff_dt
+                    ).exclude(pr_number__in=current_pr_numbers).delete()
                 for pr in prs_raw:
                     p_num = pr.get('pr_number') or pr.get('number')
                     if not p_num:
@@ -586,9 +622,15 @@ class AnalysisService:
             issues_count=issue_stats['total_analyzed'],
             prs_count=pr_stats['total_analyzed'],
             contribs_count=contributor_stats['total_recorded'],
+            languages_count=len(language_stats),
             window_label=window_label,
             generated_at=repo_obj.fetched_at.isoformat() if repo_obj.fetched_at else '',
             reused_from_cache=True,
+            commits_status='cached',
+            issues_status='cached',
+            prs_status='cached',
+            contribs_status='cached',
+            languages_status='cached',
         )
 
         health_trend = AnalyticsEngine.calculate_historical_trend(repo_obj.analyses.order_by('analyzed_at'))
@@ -622,13 +664,42 @@ class AnalysisService:
         window_label: Optional[str] = None,
         generated_at: Optional[str] = None,
         reused_from_cache: bool = False,
+        commits_status: str = 'complete',
+        issues_status: str = 'complete',
+        prs_status: str = 'complete',
+        contribs_status: str = 'complete',
+        languages_status: str = 'complete',
     ) -> Dict[str, Any]:
         """
         Builds a comprehensive data provenance and telemetry coverage dictionary
-        exposing analyzed sample counts, limits, source, and window identifiers.
+        exposing analyzed sample counts, limits, stream statuses, source, and window identifiers.
         """
         if not window_label:
             _, window_label = self._get_window_cutoff(window)
+
+        stream_statuses = {
+            'metadata': 'complete',
+            'commits': commits_status,
+            'issues': issues_status,
+            'prs': prs_status,
+            'contributors': contribs_status,
+            'languages': languages_status,
+        }
+
+        # Truthful completeness determination
+        if any(s == 'failed' for s in stream_statuses.values()):
+            completeness = 'Degraded'
+            is_partial = True
+        elif any(s == 'partial' for s in stream_statuses.values()):
+            completeness = 'Partial'
+            is_partial = True
+        elif reused_from_cache:
+            completeness = 'Cached'
+            is_partial = False
+        else:
+            completeness = 'Complete'
+            is_partial = False
+
         return {
             'window': window,
             'analysis_window': window,
@@ -645,12 +716,22 @@ class AnalysisService:
                 'prs': 100,
                 'contributors': 30,
             },
+            'stream_statuses': stream_statuses,
+            'streams': {
+                'metadata': {'status': 'complete', 'source': 'GitHub REST API'},
+                'commits': {'status': commits_status, 'count': commits_count, 'sample_limit': 100},
+                'issues': {'status': issues_status, 'count': issues_count, 'sample_limit': 100},
+                'pull_requests': {'status': prs_status, 'count': prs_count, 'sample_limit': 100},
+                'contributors': {'status': contribs_status, 'count': contribs_count, 'sample_limit': 30},
+                'languages': {'status': languages_status, 'count': languages_count},
+            },
             'github_api_authenticated': bool(self.github_service.token),
             'github_api_limit': 5000 if self.github_service.token else 60,
             'source': 'GitHub REST API',
             'generated_at': generated_at or datetime.now(timezone.utc).isoformat(),
             'reused_from_cache': reused_from_cache,
-            'completeness_status': 'Complete' if commits_count > 0 else 'Partial',
+            'completeness_status': completeness,
+            'is_partial': is_partial,
         }
 
     def _assemble_dashboard_payload(

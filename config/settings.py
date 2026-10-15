@@ -30,6 +30,7 @@ ALLOWED_HOSTS = [host.strip() for host in os.getenv('ALLOWED_HOSTS', 'localhost,
 # Security HTTP headers and cookie flags (Section 37)
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 ENABLE_HTTPS_SECURITY = os.getenv('ENABLE_HTTPS_SECURITY', 'False').lower() in ('true', '1', 'yes')
 if not DEBUG and ENABLE_HTTPS_SECURITY:
@@ -67,6 +68,12 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+try:
+    import whitenoise
+    MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
+except ImportError:
+    pass
+
 ROOT_URLCONF = 'config.urls'
 
 TEMPLATES = [
@@ -91,6 +98,7 @@ ASGI_APPLICATION = 'config.asgi.application'
 # Database Configuration
 # Primary Production Configuration: PostgreSQL.
 # In accordance with Test Database Independence (Section 47), running tests uses isolated SQLite.
+DATABASE_URL = os.getenv('DATABASE_URL', '').strip()
 DB_ENGINE = os.getenv('DB_ENGINE', 'django.db.backends.postgresql')
 DB_NAME = os.getenv('DB_NAME', 'opensourcelens')
 DB_USER = os.getenv('DB_USER', 'postgres')
@@ -105,6 +113,26 @@ if IS_TESTING or USE_SQLITE or 'sqlite3' in DB_ENGINE:
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+elif DATABASE_URL:
+    from urllib.parse import urlparse, unquote
+    parsed_db = urlparse(DATABASE_URL)
+    db_engine = 'django.db.backends.postgresql'
+    if 'sqlite' in parsed_db.scheme:
+        db_engine = 'django.db.backends.sqlite3'
+        db_name = parsed_db.path[1:] or str(BASE_DIR / 'db.sqlite3')
+    else:
+        db_name = unquote(parsed_db.path[1:]) if parsed_db.path else DB_NAME
+
+    DATABASES = {
+        'default': {
+            'ENGINE': db_engine,
+            'NAME': db_name,
+            'USER': unquote(parsed_db.username or '') or DB_USER,
+            'PASSWORD': unquote(parsed_db.password or '') or DB_PASSWORD,
+            'HOST': parsed_db.hostname or DB_HOST,
+            'PORT': str(parsed_db.port or DB_PORT),
         }
     }
 else:

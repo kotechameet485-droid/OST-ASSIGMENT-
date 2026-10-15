@@ -11,7 +11,15 @@ from typing import List, Dict, Any, Optional
 from django.db.models import Q, Count
 from dashboard.models import Repository, RepositoryAnalysis
 from dashboard.analytics.analytics_engine import AnalyticsEngine, format_metric_number
-from dashboard.services.github_service import GitHubService
+from dashboard.services.github_service import (
+    GitHubService,
+    GitHubAPIError,
+    GitHubInvalidRepoError,
+    GitHubRepoNotFoundError,
+    GitHubRateLimitExceededError,
+    GitHubForbiddenError,
+    GitHubAuthenticationError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -220,6 +228,7 @@ class RepositoryService:
         Always runs full, genuine AnalysisService pipeline if complete analysis
         is missing, guaranteeing identical methodology and zero invented metrics.
         Strictly presents objective comparisons without 'winner' or 'best' declarations.
+        Preserves all candidate identities, recording per-candidate status and failure reasons.
         """
         if len(raw_candidates) < 2:
             return None
@@ -227,12 +236,26 @@ class RepositoryService:
         from dashboard.services.analysis_service import AnalysisService
         analysis_service = AnalysisService()
         parsed_repos = []
+        candidate_results = []
+        failed_candidates = []
 
         for raw in raw_candidates[:3]:
             try:
                 owner, repo_name = GitHubService.validate_and_normalize(raw)
-                full_name = f"{owner}/{repo_name}"
+            except (GitHubInvalidRepoError, ValueError) as val_err:
+                candidate_info = {
+                    'raw': raw,
+                    'name': raw,
+                    'status': 'invalid',
+                    'error': str(val_err) or "Invalid repository format. Expected 'owner/repo'.",
+                }
+                candidate_results.append(candidate_info)
+                failed_candidates.append(candidate_info)
+                continue
 
+            full_name = f"{owner}/{repo_name}"
+
+            try:
                 # Always execute full analysis pipeline (reuses fresh cache if available)
                 analysis_context = analysis_service.run_analysis(
                     owner=owner,
@@ -249,7 +272,7 @@ class RepositoryService:
                 pr_stats = analysis_context.get('pr_stats', {})
                 contrib_stats = analysis_context.get('contributor_stats', {})
 
-                parsed_repos.append({
+                repo_entry = {
                     'name': repo_d['full_name'],
                     'owner': repo_d['owner'],
                     'repo': repo_d['name'],
@@ -280,27 +303,80 @@ class RepositoryService:
                     'analysis_window': window,
                     'window_label': cov_d.get('window_label', 'Last 90 Days'),
                     'data_coverage': cov_d,
+                    'status': 'success',
+                    'status_label': 'Complete' if not cov_d.get('is_partial', False) else 'Partial',
+                    'completeness_status': cov_d.get('completeness_status', 'Complete'),
+                    'is_partial': cov_d.get('is_partial', False),
+                }
+                parsed_repos.append(repo_entry)
+                candidate_results.append({
+                    'raw': raw,
+                    'name': full_name,
+                    'status': 'success',
+                    'repo_entry': repo_entry,
                 })
+            except GitHubRepoNotFoundError:
+                candidate_info = {
+                    'raw': raw,
+                    'name': full_name,
+                    'status': 'not_found',
+                    'error': f"Repository '{full_name}' was not found on GitHub.",
+                }
+                candidate_results.append(candidate_info)
+                failed_candidates.append(candidate_info)
+            except GitHubRateLimitExceededError as rle:
+                candidate_info = {
+                    'raw': raw,
+                    'name': full_name,
+                    'status': 'rate_limited',
+                    'error': f"GitHub API rate limit exceeded ({getattr(rle, 'reset_time_str', 'please retry later')}).",
+                }
+                candidate_results.append(candidate_info)
+                failed_candidates.append(candidate_info)
+            except GitHubForbiddenError:
+                candidate_info = {
+                    'raw': raw,
+                    'name': full_name,
+                    'status': 'forbidden',
+                    'error': f"Access to '{full_name}' is forbidden or private.",
+                }
+                candidate_results.append(candidate_info)
+                failed_candidates.append(candidate_info)
             except Exception as e:
-                logger.warning(f"Could not load full repository analysis for comparison on '{raw}': {e}")
+                logger.warning(f"Could not load full repository analysis for comparison on '{raw}': {e}", exc_info=True)
+                candidate_info = {
+                    'raw': raw,
+                    'name': full_name,
+                    'status': 'failed',
+                    'error': f"Failed to analyze '{full_name}': {str(e)}",
+                }
+                candidate_results.append(candidate_info)
+                failed_candidates.append(candidate_info)
 
-        if len(parsed_repos) < 2:
-            return None
+        comparison_results = None
+        chart_payload = None
+        comparison_chart_json = None
 
-        comparison_results = AnalyticsEngine.compare_repositories(parsed_repos)
-        chart_payload = {
-            'labels': comparison_results['chart_labels'],
-            'stars': comparison_results['stars_data'],
-            'forks': comparison_results['forks_data'],
-            'health': comparison_results['health_data'],
-        }
-        comparison_chart_json = json.dumps(chart_payload)
+        if len(parsed_repos) >= 2:
+            comparison_results = AnalyticsEngine.compare_repositories(parsed_repos)
+            chart_payload = {
+                'labels': comparison_results['chart_labels'],
+                'stars': comparison_results['stars_data'],
+                'forks': comparison_results['forks_data'],
+                'health': comparison_results['health_data'],
+            }
+            comparison_chart_json = json.dumps(chart_payload)
 
         return {
             'comparison': comparison_results,
             'chart_json': comparison_chart_json,
             'comparison_chart_data': chart_payload,
             'repositories': parsed_repos,
+            'candidate_results': candidate_results,
+            'failed_candidates': failed_candidates,
+            'success_count': len(parsed_repos),
+            'failed_count': len(failed_candidates),
+            'total_candidates': len(raw_candidates[:3]),
             'window': window,
             'analysis_window': window,
         }

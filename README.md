@@ -7,7 +7,7 @@
 [![Pandas](https://img.shields.io/badge/Pandas-2.2+-150458?style=flat&logo=pandas&logoColor=white)](https://pandas.pydata.org/)
 [![Chart.js](https://img.shields.io/badge/Chart.js-4.4-FF6384?style=flat&logo=chartdotjs&logoColor=white)](https://www.chartjs.org/)
 [![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3-7952B3?style=flat&logo=bootstrap&logoColor=white)](https://getbootstrap.com/)
-[![Tests](https://img.shields.io/badge/Tests-105%20Passed-success?style=flat&logo=pytest&logoColor=white)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-110%20Passed-success?style=flat&logo=pytest&logoColor=white)](#testing)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **OpenSourceLens** is a production-grade open-source project intelligence and health analytics platform built as part of the **Open Source Technologies (OST)** engineering curriculum. It transforms raw telemetry from the public GitHub REST API into actionable engineering metrics, evaluating repository activity, triage responsiveness, code integration, maintainer diversity, and hygiene through a transparent, reproducible, multi-signal methodology.
@@ -520,7 +520,7 @@ Open your browser to: **`http://127.0.0.1:8000/`**
 
 ## Testing
 
-The project includes an automated test suite with **105 test cases** covering every layer of the system. Tests use Python's `unittest.mock` to mock external GitHub API calls and run against an isolated test database with zero external network or database dependencies.
+The project includes an automated test suite with **110 test cases** covering every layer of the system. Tests use Python's `unittest.mock` to mock external GitHub API calls and run against an isolated test database with zero external network or database dependencies.
 
 Run the test suite:
 
@@ -536,20 +536,74 @@ python manage.py test
 - **`tests/test_views.py` (18 tests):** View lifecycles, caching verification, force refresh (`?refresh=true`), configurable window parameters (`30d`, `90d`, `180d`, `365d`), error redirects, and edge-case repositories.
 - **`tests/test_hardening.py` (14 tests):** Window & cache isolation (30d vs 90d vs 365d), immutable historical snapshots, stale entity synchronization pruning, pull request window cutoff filtering, zero synthetic comparison fallback verification, active-day vs calendar-day commit averages, CSRF protection on POST refresh, and `.env` version control isolation.
 - **`tests/test_rate_limiting.py` (17 tests):** Dedicated tests for rate limiting, resilience, token detection, mock quota ceilings, reset countdown calculations, and cached snapshot fallback recovery.
-- **`tests/test_history_hardening.py` (11 tests):** Phase 23 regression suite covering History Detail audit console Cases 1–4, GitHub organization transfer alias resolution (`facebook/react` $\to$ `react/react`), window-isolated trend evaluations, empty snapshot catalog handling, custom OpenSourceLens 404 recovery page without debug leaks, immutable snapshot preservation, safe JSON script chart embedding, and Architecture engineering specification page verification.
+- **`tests/test_history_hardening.py` (16 tests):** Complete regression suite covering History Detail audit console Cases 1–4, HTTP 500 on database error, HTTP 400 on malformed input, 30d vs 365d snapshot consistency and window pruning isolation, resilient candidate preservation in comparisons, and GitHub API pagination failure handling with `PaginatedList`.
 
 ```text
-Found 105 test(s).
+Found 110 test(s).
 System check identified no issues (0 silenced).
-.........................................................................................................
+..............................................................................................................
 ----------------------------------------------------------------------
-Ran 105 tests in 4.770s
+Ran 110 tests in 6.935s
 
 OK
 ```
 
-
 ---
+
+## Production Deployment Readiness
+
+OpenSourceLens is engineered for deployment on modern cloud and PaaS platforms (e.g. Render, Railway, Fly.io, Heroku, or traditional Ubuntu/Debian Linux VPS with Nginx and Gunicorn).
+
+### 1. Production Requirements
+- **WSGI Application Server:** Gunicorn (`gunicorn config.wsgi:application`)
+- **Database:** PostgreSQL 15+ (configured via `DATABASE_URL` or individual `DB_*` variables)
+- **Static Asset Serving:** WhiteNoise middleware (compressed & cached)
+- **SSL / HTTPS Termination:** Reverse proxy (ALB, Nginx, or PaaS SSL router)
+
+### 2. Environment Variables Checklist
+Set the following environment variables in your production hosting provider:
+
+```ini
+DEBUG=False
+SECRET_KEY=generate-a-strong-random-50+-character-key-here
+ALLOWED_HOSTS=your-app.onrender.com,yourdomain.com
+DATABASE_URL=postgresql://user:password@host:5432/dbname
+GITHUB_TOKEN=ghp_yourPersonalAccessTokenHere
+ENABLE_HTTPS_SECURITY=True
+SECURE_HSTS_SECONDS=31536000
+```
+
+### 3. Production Deployment Commands
+
+1. **Install Production Dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. **Execute Database Migrations:**
+   ```bash
+   python manage.py migrate
+   ```
+
+3. **Collect Static Assets:**
+   ```bash
+   python manage.py collectstatic --noinput
+   ```
+
+4. **Verify Deployment Security Posture:**
+   ```bash
+   python manage.py check --deploy
+   ```
+
+5. **Start Application Server:**
+   ```bash
+   # Standalone Linux/Docker execution:
+   gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 3 --timeout 60
+
+   # PaaS platforms (Render, Heroku, Railway):
+   # The repository includes a ready-to-use Procfile:
+   # web: gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
+   ```
 
 ## Collaborative Git Workflow
 

@@ -8,6 +8,7 @@ Follows thin-controller and service-layer separation principles.
 import logging
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
+from django.db import DatabaseError, OperationalError
 from django.http import (
     HttpRequest,
     HttpResponse,
@@ -206,17 +207,31 @@ def history_detail_view(request: HttpRequest, owner: str, repo: str) -> HttpResp
     Handles existing history, empty history, missing repository, and DB errors cleanly.
     """
     target_repo = f"{owner}/{repo}"
+
+    # Validate canonical repo format
+    if not GitHubService.REPO_REGEX.match(target_repo):
+        return render(request, 'errors/400.html', {
+            'error_title': 'Invalid Repository Identifier',
+            'error_message': f"'{target_repo}' is not a valid repository identifier. Format must be owner/repository.",
+        }, status=400)
+
     window = request.GET.get('window', 'all').strip().lower()
     if window not in ('all', '30d', '90d', '6m', '1y', '180d', '365d'):
         window = 'all'
 
     try:
         history_data = RepositoryService.get_history_detail(owner=owner, repo=repo, window=window)
-    except Exception as e:
+    except (OperationalError, DatabaseError) as e:
         logger.error("Database error retrieving history for %s/%s: %s", owner, repo, e, exc_info=True)
         return render(request, 'errors/500.html', {
             'error_title': 'Unable to Load Historical Data',
             'error_message': 'A database error occurred while retrieving repository history. Please try again later.',
+        }, status=500)
+    except Exception as e:
+        logger.error("Unexpected error retrieving history for %s/%s: %s", owner, repo, e, exc_info=True)
+        return render(request, 'errors/500.html', {
+            'error_title': 'Unexpected Error',
+            'error_message': 'An unexpected error occurred while loading repository history.',
         }, status=500)
 
     if not history_data:
@@ -236,6 +251,7 @@ def compare_view(request: HttpRequest) -> HttpResponse:
     Compares 2 or 3 public GitHub repositories across health metrics,
     commit velocity, pull requests, issues, and language statistics.
     Strictly presents objective comparison without 'winner' or 'best' labels.
+    Preserves all requested candidate identities and reports per-repository status.
     """
     form = RepositoryCompareForm(request.GET or None)
 
@@ -246,23 +262,36 @@ def compare_view(request: HttpRequest) -> HttpResponse:
 
     raw_candidates = [r for r in [repo1_input, repo2_input, repo3_input] if r]
 
+    comp_data = None
     comparison_results = None
     comparison_chart_json = None
     comparison_chart_data = None
+    failed_candidates = []
+    candidate_results = []
+    repositories = []
 
     if len(raw_candidates) >= 2:
         comp_data = RepositoryService.compare_repositories(raw_candidates, window=window)
         if comp_data:
-            comparison_results = comp_data['comparison']
-            comparison_chart_json = comp_data['chart_json']
+            comparison_results = comp_data.get('comparison')
+            comparison_chart_json = comp_data.get('chart_json')
             comparison_chart_data = comp_data.get('comparison_chart_data')
+            failed_candidates = comp_data.get('failed_candidates', [])
+            candidate_results = comp_data.get('candidate_results', [])
+            repositories = comp_data.get('repositories', [])
 
     return render(request, 'compare.html', {
         'form': form,
         'candidates': raw_candidates,
+        'comp_data': comp_data,
         'comparison': comparison_results,
         'chart_json': comparison_chart_json,
         'comparison_chart_data': comparison_chart_data,
+        'failed_candidates': failed_candidates,
+        'candidate_results': candidate_results,
+        'repositories': repositories,
+        'success_count': len(repositories),
+        'failed_count': len(failed_candidates),
         'window': window,
         'analysis_window': window,
     })

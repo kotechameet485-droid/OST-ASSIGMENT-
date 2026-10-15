@@ -105,6 +105,26 @@ class GitHubNetworkError(GitHubAPIError):
 GitHubRateLimitError = GitHubRateLimitExceededError
 
 
+class PaginatedList(list):
+    """
+    A list subclass that carries pagination metadata (status, completeness, error).
+    Behaves 100% identically to a normal list for all existing callers and iteration.
+    """
+    def __init__(
+        self,
+        iterable=None,
+        status: str = 'complete',
+        is_partial: bool = False,
+        error: Optional[str] = None,
+        pages_fetched: int = 0
+    ):
+        super().__init__(iterable or [])
+        self.status = status
+        self.is_partial = is_partial
+        self.error = error
+        self.pages_fetched = pages_fetched
+
+
 class GitHubService:
     """
     Authoritative service client for interacting with the public GitHub REST API.
@@ -140,6 +160,7 @@ class GitHubService:
         """
         Retrieves real-time rate limit metrics directly from GET /rate_limit.
         Returns structured diagnostic information without exposing token secrets.
+        Unknown remaining quota is represented as None, never fabricated as 5,000.
         """
         url = f"{self.base_url}/rate_limit"
         try:
@@ -183,7 +204,8 @@ class GitHubService:
         return {
             'authenticated': bool(self.token),
             'limit': 5000 if self.token else 60,
-            'remaining': 0 if not self.token else 5000,
+            'remaining': None,
+            'used': 0,
             'reset_at': 'N/A',
             'reset_timestamp': None,
             'reset_in_minutes': 0,
@@ -380,13 +402,15 @@ class GitHubService:
         limit: int = 100,
         per_page: int = 100,
         max_pages: int = 10,
-    ) -> List[Dict[str, Any]]:
+    ) -> PaginatedList:
         """
         Reusable pagination engine for GitHub API endpoints.
         Paginates until limit is reached, no more items are returned,
         or max_pages threshold is exceeded.
+        Returns a PaginatedList carrying status ('complete' | 'partial'),
+        error, and pages_fetched metadata.
         """
-        results: List[Dict[str, Any]] = []
+        results = PaginatedList()
         page = 1
         query_params = dict(params or {})
 
@@ -399,28 +423,54 @@ class GitHubService:
             try:
                 response = self._request_with_retry(url, params=query_params)
                 if response.status_code != 200:
-                    # If first page fails with error, trigger error handler
                     if page == 1:
                         self._handle_response(response, endpoint)
+                    # Page > 1 failure: mark partial and stop
+                    results.is_partial = True
+                    results.status = 'partial'
+                    results.error = f"HTTP {response.status_code} on page {page}"
+                    logger.warning("Pagination on %s halted at page %s: %s", endpoint, page, results.error)
                     break
 
-                data = response.json()
+                try:
+                    data = response.json()
+                except Exception as json_err:
+                    if page == 1:
+                        self._handle_response(response, endpoint)
+                    results.is_partial = True
+                    results.status = 'partial'
+                    results.error = f"Malformed JSON on page {page}: {json_err}"
+                    logger.warning("Pagination on %s failed JSON parse at page %s: %s", endpoint, page, json_err)
+                    break
+
                 if not isinstance(data, list) or not data:
                     break
 
                 results.extend(data)
+                results.pages_fetched = page
 
                 # Stop if returned less than requested per_page
                 if len(data) < batch_size:
                     break
 
                 page += 1
-            except (GitHubTimeoutError, GitHubAPIError):
+            except (GitHubTimeoutError, GitHubAPIError, requests.RequestException) as e:
                 if page == 1:
                     raise
+                results.is_partial = True
+                results.status = 'partial'
+                results.error = f"API/Network error on page {page}: {e}"
+                logger.warning("Pagination on %s encountered error at page %s: %s", endpoint, page, e)
                 break
 
-        return results[:limit]
+        trimmed = PaginatedList(
+            results[:limit],
+            status=results.status,
+            is_partial=results.is_partial,
+            error=results.error,
+            pages_fetched=results.pages_fetched,
+        )
+        return trimmed
 
     def get_repository(self, owner: str, repo: str) -> Dict[str, Any]:
         """
@@ -475,27 +525,34 @@ class GitHubService:
             'has_pages': data.get('has_pages', False),
         }
 
-    def get_languages(self, owner: str, repo: str) -> Dict[str, int]:
+    def get_languages(self, owner: str, repo: str) -> Optional[Dict[str, int]]:
         """
         Retrieves programming language byte breakdown for the repository.
+        Returns a dictionary of language bytes on success (empty {} if repository has no code).
+        Returns None if the API request failed or was unavailable, allowing callers to
+        distinguish a genuine empty repository from an API failure.
         """
         url = f"{self.base_url}/repos/{owner}/{repo}/languages"
         try:
             response = self._request_with_retry(url)
             if response.status_code == 200:
                 return response.json()
-            return {}
+            elif response.status_code == 404:
+                return {}
+            logger.warning("Failed to fetch languages for %s/%s (HTTP %s): %s", owner, repo, response.status_code, response.text[:100])
+            return None
         except Exception as e:
-            logger.warning(f"Failed to fetch languages for {owner}/{repo}: {e}")
-            return {}
+            logger.warning("Failed to fetch languages for %s/%s: %s", owner, repo, e)
+            return None
 
-    def get_contributors(self, owner: str, repo: str, limit: int = 30) -> List[Dict[str, Any]]:
+    def get_contributors(self, owner: str, repo: str, limit: int = 30) -> PaginatedList:
         """
         Retrieves top contributors for the repository using reusable pagination.
+        Returns a PaginatedList with status and completeness indicators.
         """
         endpoint = f"/repos/{owner}/{repo}/contributors"
         raw_items = self._paginate(endpoint, limit=limit, per_page=min(limit, 100))
-        return [
+        results = [
             {
                 'username': item.get('login') or 'Unknown',
                 'contributions': item.get('contributions', 0),
@@ -505,8 +562,15 @@ class GitHubService:
             for item in raw_items
             if isinstance(item, dict)
         ]
+        return PaginatedList(
+            results,
+            status=getattr(raw_items, 'status', 'complete'),
+            is_partial=getattr(raw_items, 'is_partial', False),
+            error=getattr(raw_items, 'error', None),
+            pages_fetched=getattr(raw_items, 'pages_fetched', 1)
+        )
 
-    def get_recent_commits(self, owner: str, repo: str, limit: int = 10) -> List[Dict[str, Any]]:
+    def get_recent_commits(self, owner: str, repo: str, limit: int = 10) -> PaginatedList:
         """
         Retrieves recent commit metadata for backward compatibility.
         """
@@ -518,9 +582,10 @@ class GitHubService:
         repo: str,
         limit: int = 100,
         since: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> PaginatedList:
         """
         Retrieves commits for the repository across pages, supporting configurable analysis window (since).
+        Returns a PaginatedList with status and completeness indicators.
         """
         endpoint = f"/repos/{owner}/{repo}/commits"
         params: Dict[str, Any] = {}
@@ -542,7 +607,13 @@ class GitHubService:
                 'author': author_info.get('name') or committer_info.get('name') or 'Unknown',
                 'date': date_str,
             })
-        return results
+        return PaginatedList(
+            results,
+            status=getattr(raw_items, 'status', 'complete'),
+            is_partial=getattr(raw_items, 'is_partial', False),
+            error=getattr(raw_items, 'error', None),
+            pages_fetched=getattr(raw_items, 'pages_fetched', 1)
+        )
 
     def get_issues(
         self,
@@ -550,13 +621,14 @@ class GitHubService:
         repo: str,
         limit: int = 100,
         since: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> PaginatedList:
         """
         Retrieves issues (both open and closed) across pages, strictly excluding pull requests.
         Supports filtering by date window via since parameter.
+        Returns a PaginatedList with status and completeness indicators.
         """
         endpoint = f"/repos/{owner}/{repo}/issues"
-        params: Dict[str, Any] = {'state': 'all'}
+        params: Dict[str, Any] = {'state': 'all', 'sort': 'created', 'direction': 'desc'}
         if since:
             params['since'] = since
 
@@ -579,7 +651,13 @@ class GitHubService:
             })
             if len(issues) >= target_limit:
                 break
-        return issues
+        return PaginatedList(
+            issues,
+            status=getattr(raw_items, 'status', 'complete'),
+            is_partial=getattr(raw_items, 'is_partial', False),
+            error=getattr(raw_items, 'error', None),
+            pages_fetched=getattr(raw_items, 'pages_fetched', 1)
+        )
 
     def get_pull_requests(
         self,
@@ -587,11 +665,12 @@ class GitHubService:
         repo: str,
         limit: int = 100,
         since: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> PaginatedList:
         """
         Retrieves pull requests with resolution state (open, closed, merged) across pages.
         Supports time-window filtering via the `since` parameter (ISO 8601 string).
         Ensures old pull requests outside the analysis window are not included.
+        Returns a PaginatedList with status and completeness indicators.
         """
         endpoint = f"/repos/{owner}/{repo}/pulls"
         params: Dict[str, Any] = {'state': 'all', 'sort': 'created', 'direction': 'desc'}
@@ -638,5 +717,11 @@ class GitHubService:
             })
             if len(prs) >= limit:
                 break
-        return prs
+        return PaginatedList(
+            prs,
+            status=getattr(raw_items, 'status', 'complete'),
+            is_partial=getattr(raw_items, 'is_partial', False),
+            error=getattr(raw_items, 'error', None),
+            pages_fetched=getattr(raw_items, 'pages_fetched', 1)
+        )
 
