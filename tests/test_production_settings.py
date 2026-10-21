@@ -96,3 +96,88 @@ class VercelConfigurationTests(SimpleTestCase):
         self.assertIsNotNone(settings.STATIC_ROOT)
         self.assertTrue(len(settings.STATICFILES_DIRS) > 0)
         self.assertNotEqual(str(settings.STATIC_ROOT), str(settings.STATICFILES_DIRS[0]))
+
+    def test_vercel_rewrites_configured(self):
+        """vercel.json must configure rewrites mapping /(.*) to config/wsgi.py."""
+        vercel_json_path = settings.BASE_DIR / 'vercel.json'
+        with open(vercel_json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        rewrites = data.get('rewrites', [])
+        has_wsgi_rewrite = any(
+            r.get('destination') == 'config/wsgi.py' and r.get('source') in ('/(.*)', '/.*')
+            for r in rewrites
+        )
+        self.assertTrue(has_wsgi_rewrite, "vercel.json must route incoming requests to config/wsgi.py")
+
+    def test_parse_database_url_helper_postgresql(self):
+        """parse_database_url correctly parses encoded credentials, host, port, db, and sslmode."""
+        from config.settings import parse_database_url
+        url = "postgresql://user_admin:p%40ss%23word@db.neon.tech:5432/production_db?sslmode=require"
+        config = parse_database_url(url)
+        self.assertEqual(config['ENGINE'], 'django.db.backends.postgresql')
+        self.assertEqual(config['NAME'], 'production_db')
+        self.assertEqual(config['USER'], 'user_admin')
+        self.assertEqual(config['PASSWORD'], 'p@ss#word')
+        self.assertEqual(config['HOST'], 'db.neon.tech')
+        self.assertEqual(config['PORT'], '5432')
+        self.assertEqual(config['OPTIONS']['sslmode'], 'require')
+
+    def test_parse_database_url_helper_postgres_alias(self):
+        """parse_database_url accepts 'postgres://' and normalizes to django.db.backends.postgresql."""
+        from config.settings import parse_database_url
+        url = "postgres://usr:pwd@db.host.com/myapp"
+        config = parse_database_url(url)
+        self.assertEqual(config['ENGINE'], 'django.db.backends.postgresql')
+        self.assertEqual(config['NAME'], 'myapp')
+        self.assertEqual(config['USER'], 'usr')
+        self.assertEqual(config['PASSWORD'], 'pwd')
+        self.assertEqual(config['HOST'], 'db.host.com')
+        self.assertEqual(config['PORT'], '5432')
+
+    def test_parse_database_url_helper_sqlite(self):
+        """parse_database_url accepts sqlite:// URLs."""
+        from config.settings import parse_database_url
+        url = "sqlite:///custom/path/test.sqlite3"
+        config = parse_database_url(url)
+        self.assertEqual(config['ENGINE'], 'django.db.backends.sqlite3')
+        self.assertIn('test.sqlite3', config['NAME'])
+
+    def test_parse_database_url_invalid_scheme_raises(self):
+        """parse_database_url rejects unsupported schemes without leaking credentials."""
+        from config.settings import parse_database_url
+        with self.assertRaises(ImproperlyConfigured):
+            parse_database_url("mysql://root:secret@localhost/db")
+
+    def test_parse_database_url_missing_name_raises(self):
+        """parse_database_url rejects URLs with missing database name."""
+        from config.settings import parse_database_url
+        with self.assertRaises(ImproperlyConfigured):
+            parse_database_url("postgresql://user:pass@localhost:5432/")
+
+    def test_custom_error_handlers_registered(self):
+        """Custom HTTP 400, 403, 404, and 500 error handlers are properly configured."""
+        import config.urls as urls_module
+        self.assertEqual(urls_module.handler400, 'dashboard.views.error_400_view')
+        self.assertEqual(urls_module.handler403, 'dashboard.views.error_403_view')
+        self.assertEqual(urls_module.handler404, 'dashboard.views.error_404_view')
+        self.assertEqual(urls_module.handler500, 'dashboard.views.error_500_view')
+
+    def test_custom_error_views_return_correct_status(self):
+        """Error handler views render proper templates and return correct status codes."""
+        from django.test import RequestFactory
+        from dashboard.views import error_400_view, error_403_view, error_404_view, error_500_view
+        factory = RequestFactory()
+
+        req = factory.get('/any-path/')
+        resp_400 = error_400_view(req)
+        self.assertEqual(resp_400.status_code, 400)
+
+        resp_403 = error_403_view(req)
+        self.assertEqual(resp_403.status_code, 403)
+
+        resp_404 = error_404_view(req)
+        self.assertEqual(resp_404.status_code, 404)
+
+        resp_500 = error_500_view(req)
+        self.assertEqual(resp_500.status_code, 500)
+

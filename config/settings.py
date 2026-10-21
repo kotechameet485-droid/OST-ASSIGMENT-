@@ -3,7 +3,7 @@ Django settings for OpenSourceLens project.
 """
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 import os
 import sys
 from dotenv import load_dotenv
@@ -16,32 +16,51 @@ load_dotenv(BASE_DIR / '.env')
 
 from django.core.exceptions import ImproperlyConfigured
 
-# Security settings
-DEBUG = os.getenv('DEBUG', 'True').lower() in ('true', '1', 'yes')
+INSECURE_SECRET_KEYS = {
+    'django-insecure-opensourcelens-dev-key-default',
+    'django-insecure-opensourcelens-dev-key-change-in-production',
+    'replace-with-your-strong-random-django-secret-key',
+}
 
-if DEBUG:
+IS_TESTING = 'test' in sys.argv
+
+# Security settings: In production, DEBUG defaults to False unless explicitly enabled.
+DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 'yes')
+
+if DEBUG or IS_TESTING:
     SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-opensourcelens-dev-key-default')
 else:
-    SECRET_KEY = os.getenv('SECRET_KEY')
+    SECRET_KEY = os.getenv('SECRET_KEY', '').strip()
     if not SECRET_KEY:
         raise ImproperlyConfigured("The SECRET_KEY environment variable must be explicitly configured in production when DEBUG=False.")
+    if SECRET_KEY in INSECURE_SECRET_KEYS or SECRET_KEY.startswith('django-insecure-') or len(SECRET_KEY) < 32:
+        raise ImproperlyConfigured("A secure, non-default SECRET_KEY with at least 32 characters must be configured in production.")
 
 raw_allowed_hosts = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,.vercel.app')
 ALLOWED_HOSTS = [host.strip() for host in raw_allowed_hosts.split(',') if host.strip()]
 if '.vercel.app' not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append('.vercel.app')
+if 'testserver' not in ALLOWED_HOSTS and (DEBUG or IS_TESTING):
+    ALLOWED_HOSTS.append('testserver')
 
 raw_csrf_origins = os.getenv('CSRF_TRUSTED_ORIGINS', 'https://*.vercel.app,http://localhost:8000,http://127.0.0.1:8000')
-CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in raw_csrf_origins.split(',') if origin.strip()]
+CSRF_TRUSTED_ORIGINS = []
+for origin in [o.strip() for o in raw_csrf_origins.split(',') if o.strip()]:
+    if not origin.startswith(('http://', 'https://')):
+        origin = f"https://{origin}"
+    CSRF_TRUSTED_ORIGINS.append(origin)
+if 'https://*.vercel.app' not in CSRF_TRUSTED_ORIGINS:
+    CSRF_TRUSTED_ORIGINS.append('https://*.vercel.app')
 
-# Security HTTP headers and cookie flags (Section 37)
+# Security HTTP headers and cookie flags
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-ENABLE_HTTPS_SECURITY = os.getenv('ENABLE_HTTPS_SECURITY', 'False').lower() in ('true', '1', 'yes')
-if not DEBUG and ENABLE_HTTPS_SECURITY:
-    SECURE_SSL_REDIRECT = True
+# In production (DEBUG=False and not testing), HTTPS security flags are enabled by default.
+ENABLE_HTTPS_SECURITY = os.getenv('ENABLE_HTTPS_SECURITY', str(not DEBUG and not IS_TESTING)).lower() in ('true', '1', 'yes')
+if not DEBUG and not IS_TESTING and ENABLE_HTTPS_SECURITY:
+    SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'True').lower() in ('true', '1', 'yes')
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '31536000'))
@@ -102,9 +121,56 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 # ASGI_APPLICATION is omitted to ensure Vercel uses the standard WSGI entrypoint config.wsgi:application
 
+def parse_database_url(url: str, default_options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Safely parses database connection URLs for PostgreSQL and SQLite.
+    Properly decodes percent-encoded usernames and passwords, extracts host/port,
+    and isolates query parameters (such as sslmode) into OPTIONS without leaking credentials.
+    """
+    from urllib.parse import urlparse, unquote, parse_qs
+    if not url or not isinstance(url, str):
+        raise ImproperlyConfigured("DATABASE_URL must be a non-empty string.")
+
+    parsed = urlparse(url.strip())
+    if parsed.scheme not in ('postgres', 'postgresql', 'sqlite', 'sqlite3'):
+        raise ImproperlyConfigured(
+            f"Unsupported database scheme: '{parsed.scheme}'. "
+            "OpenSourceLens production supports 'postgresql://' or 'postgres://'."
+        )
+
+    if 'sqlite' in parsed.scheme:
+        db_path = parsed.path[1:] if parsed.path.startswith('/') else parsed.path
+        return {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': db_path or str(BASE_DIR / 'db.sqlite3'),
+        }
+
+    options: Dict[str, Any] = dict(default_options or {})
+    if parsed.query:
+        query_params = parse_qs(parsed.query)
+        for key in ('sslmode', 'channel_binding', 'sslrootcert', 'target_session_attrs'):
+            if key in query_params and query_params[key]:
+                options[key] = query_params[key][0]
+
+    raw_path = parsed.path[1:] if parsed.path.startswith('/') else parsed.path
+    db_name = unquote(raw_path) if raw_path else ''
+    if not db_name:
+        raise ImproperlyConfigured("DATABASE_URL must specify a database name.")
+
+    db_config: Dict[str, Any] = {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': db_name,
+        'USER': unquote(parsed.username or ''),
+        'PASSWORD': unquote(parsed.password or ''),
+        'HOST': parsed.hostname or '127.0.0.1',
+        'PORT': str(parsed.port) if parsed.port else '5432',
+    }
+    if options:
+        db_config['OPTIONS'] = options
+    return db_config
+
+
 # Database Configuration
-# Primary Production Configuration: PostgreSQL.
-# In accordance with Test Database Independence (Section 47), running tests uses isolated SQLite.
 DATABASE_URL = os.getenv('DATABASE_URL', '').strip()
 DB_ENGINE = os.getenv('DB_ENGINE', 'django.db.backends.postgresql')
 DB_NAME = os.getenv('DB_NAME', 'opensourcelens')
@@ -113,7 +179,6 @@ DB_PASSWORD = os.getenv('DB_PASSWORD', 'postgres')
 DB_HOST = os.getenv('DB_HOST', '127.0.0.1')
 DB_PORT = os.getenv('DB_PORT', '5432')
 USE_SQLITE = os.getenv('USE_SQLITE', 'False').lower() in ('true', '1', 'yes')
-IS_TESTING = 'test' in sys.argv
 
 if IS_TESTING or USE_SQLITE or 'sqlite3' in DB_ENGINE:
     DATABASES = {
@@ -123,37 +188,13 @@ if IS_TESTING or USE_SQLITE or 'sqlite3' in DB_ENGINE:
         }
     }
 elif DATABASE_URL:
-    from urllib.parse import urlparse, unquote, parse_qs
-    parsed_db = urlparse(DATABASE_URL)
-    db_engine = 'django.db.backends.postgresql'
-    db_options = {}
-    if 'sqlite' in parsed_db.scheme:
-        db_engine = 'django.db.backends.sqlite3'
-        db_name = parsed_db.path[1:] or str(BASE_DIR / 'db.sqlite3')
-    else:
-        db_name = unquote(parsed_db.path[1:]) if parsed_db.path else DB_NAME
-        if parsed_db.query:
-            query_params = parse_qs(parsed_db.query)
-            if 'sslmode' in query_params:
-                db_options['sslmode'] = query_params['sslmode'][0]
-        sslmode_env = os.getenv('DB_SSLMODE', '').strip()
-        if sslmode_env:
-            db_options['sslmode'] = sslmode_env
-
-    default_db: Dict[str, Any] = {
-        'ENGINE': db_engine,
-        'NAME': db_name,
-        'USER': unquote(parsed_db.username or '') or DB_USER,
-        'PASSWORD': unquote(parsed_db.password or '') or DB_PASSWORD,
-        'HOST': parsed_db.hostname or DB_HOST,
-        'PORT': str(parsed_db.port or DB_PORT),
-    }
-    if db_options:
-        default_db['OPTIONS'] = db_options
-    DATABASES: Dict[str, Dict[str, Any]] = {
-        'default': default_db,
+    sslmode_env = os.getenv('DB_SSLMODE', '').strip()
+    default_opts = {'sslmode': sslmode_env} if sslmode_env else {}
+    DATABASES = {
+        'default': parse_database_url(DATABASE_URL, default_options=default_opts),
     }
 else:
+    # Managed PostgreSQL via individual DB_* variables
     db_options_pg: Dict[str, Any] = {}
     sslmode_env = os.getenv('DB_SSLMODE', '').strip()
     if sslmode_env:
@@ -252,6 +293,11 @@ LOGGING = {
             'propagate': False,
         },
         'django.request': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'django.security': {
             'handlers': ['console'],
             'level': 'WARNING',
             'propagate': False,

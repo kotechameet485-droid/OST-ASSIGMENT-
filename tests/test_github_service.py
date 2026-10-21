@@ -212,3 +212,97 @@ class GitHubServiceTests(TestCase):
         self.assertEqual(prs[0]['state'], 'open')
         self.assertEqual(prs[1]['state'], 'merged')
         self.assertEqual(prs[2]['state'], 'closed')
+
+    def test_authorization_bearer_header_with_custom_token(self):
+        """Custom token passed to GitHubService properly sets Authorization: Bearer header."""
+        test_token = "mock_secret_pat_value_98765"
+        service = GitHubService(token=test_token)
+        self.assertTrue(service.is_authenticated)
+        self.assertEqual(service.session.headers.get('Authorization'), f"Bearer {test_token}")
+        self.assertEqual(service.session.headers.get('Accept'), 'application/vnd.github+json')
+        self.assertEqual(service.session.headers.get('X-GitHub-Api-Version'), '2022-11-28')
+
+    def test_authorization_header_omitted_without_token(self):
+        """When token is empty string or None, Authorization header is omitted."""
+        service = GitHubService(token="")
+        self.assertFalse(service.is_authenticated)
+        self.assertNotIn('Authorization', service.session.headers)
+
+    @patch('requests.Session.get')
+    def test_rate_limit_status_authenticated(self, mock_get):
+        """get_rate_limit_status returns structured dict with 5000 quota for authenticated client."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            'resources': {
+                'core': {
+                    'limit': 5000,
+                    'remaining': 4980,
+                    'reset': 1893456000,
+                    'used': 20,
+                }
+            }
+        }
+        mock_get.return_value = mock_resp
+
+        service = GitHubService(token="mock_tok")
+        status = service.get_rate_limit_status()
+        self.assertTrue(status['authenticated'])
+        self.assertEqual(status['limit'], 5000)
+        self.assertEqual(status['remaining'], 4980)
+        self.assertEqual(status['used'], 20)
+        self.assertEqual(status['status'], 'ok')
+
+    @patch('requests.Session.get')
+    def test_rate_limit_status_unauthenticated(self, mock_get):
+        """get_rate_limit_status returns 60 quota for unauthenticated client."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            'resources': {
+                'core': {
+                    'limit': 60,
+                    'remaining': 58,
+                    'reset': 1893456000,
+                    'used': 2,
+                }
+            }
+        }
+        mock_get.return_value = mock_resp
+
+        service = GitHubService(token="")
+        status = service.get_rate_limit_status()
+        self.assertFalse(status['authenticated'])
+        self.assertEqual(status['limit'], 60)
+        self.assertEqual(status['remaining'], 58)
+
+    @patch('requests.Session.get')
+    def test_rate_limit_status_invalid_token_401(self, mock_get):
+        """get_rate_limit_status returns auth_failed structure on 401 response."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 401
+        mock_get.return_value = mock_resp
+
+        service = GitHubService(token="bad_token")
+        status = service.get_rate_limit_status()
+        self.assertEqual(status['status'], 'auth_failed')
+        self.assertEqual(status['error'], 'invalid_token')
+        self.assertFalse(status['authenticated'])
+
+    @patch('requests.Session.get')
+    def test_sensitive_token_never_present_in_error_message(self, mock_get):
+        """Authentication and API errors must never interpolate or leak the secret token."""
+        secret_token = "secret_github_pat_do_not_leak_12345"
+        mock_resp = MagicMock()
+        mock_resp.status_code = 401
+        mock_resp.text = '{"message": "Bad credentials"}'
+        mock_get.return_value = mock_resp
+
+        service = GitHubService(token=secret_token)
+        try:
+            service.get_repository('facebook', 'react')
+            self.fail("Expected GitHubAPIError not raised")
+        except GitHubAPIError as err:
+            self.assertNotIn(secret_token, str(err))
+            self.assertNotIn(secret_token, repr(err))
+

@@ -7,7 +7,7 @@
 [![Pandas](https://img.shields.io/badge/Pandas-2.2+-150458?style=flat&logo=pandas&logoColor=white)](https://pandas.pydata.org/)
 [![Chart.js](https://img.shields.io/badge/Chart.js-4.4-FF6384?style=flat&logo=chartdotjs&logoColor=white)](https://www.chartjs.org/)
 [![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3-7952B3?style=flat&logo=bootstrap&logoColor=white)](https://getbootstrap.com/)
-[![Tests](https://img.shields.io/badge/Tests-119%20Passed-success?style=flat&logo=pytest&logoColor=white)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-133%20Passed-success?style=flat&logo=pytest&logoColor=white)](#testing)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **OpenSourceLens** is a production-grade open-source project intelligence and health analytics platform built as part of the **Open Source Technologies (OST)** engineering curriculum. It transforms raw telemetry from the public GitHub REST API into actionable engineering metrics, evaluating repository activity, triage responsiveness, code integration, maintainer diversity, and hygiene through a transparent, reproducible, multi-signal methodology.
@@ -522,7 +522,7 @@ Open your browser to: **`http://127.0.0.1:8000/`**
 
 ## Testing
 
-The project includes an automated test suite with **119 test cases** covering every layer of the system. Tests use Python's `unittest.mock` to mock external GitHub API calls and run against an isolated test database with zero external network or database dependencies.
+The project includes an automated test suite with **133 test cases** covering every layer of the system. Tests use Python's `unittest.mock` to mock external GitHub API calls and run against an isolated test database with zero external network or database dependencies.
 
 Run the test suite:
 
@@ -532,21 +532,21 @@ python manage.py test
 
 ### Test Coverage Highlights:
 - **`tests/test_validation.py` (7 tests):** Format validation for `owner/repo` formats, URLs, and edge-case syntax.
-- **`tests/test_github_service.py` (12 tests):** Pagination cycles, HTTP 404, HTTP 401, HTTP 403/429 rate limit reset parsing, HTTP 500 server errors, request timeouts, and malformed JSON.
+- **`tests/test_github_service.py` (18 tests):** Pagination cycles, HTTP 404, HTTP 401 (bad credentials), HTTP 403/429 rate limit reset parsing, HTTP 500 server errors, request timeouts, malformed JSON, Bearer token header injection, unauthenticated fallback (no Authorization header), rate limit payload parsing (authenticated vs unauthenticated), and credential sanitization in error messages.
 - **`tests/test_models.py` (9 tests):** Database relationships, cascading deletes, unique constraints, and atomic transaction rollback.
-- **`tests/test_analytics.py` (17 tests):** Pandas time-series grouping, outlier-resilient median close times, HHI concentration calculations, and zero-division edge cases.
+- **`tests/test_analytics.py` (17 tests):** Pandas time-series grouping, outlier-resilient median close times, HHI concentration calculations, dynamic commit recency timestamps, and zero-division edge cases.
 - **`tests/test_views.py` (18 tests):** View lifecycles, caching verification, force refresh (`?refresh=true`), configurable window parameters (`30d`, `90d`, `180d`, `365d`), error redirects, and edge-case repositories.
 - **`tests/test_hardening.py` (14 tests):** Window & cache isolation (30d vs 90d vs 365d), immutable historical snapshots, stale entity synchronization pruning, pull request window cutoff filtering, zero synthetic comparison fallback verification, active-day vs calendar-day commit averages, CSRF protection on POST refresh, and `.env` version control isolation.
 - **`tests/test_rate_limiting.py` (17 tests):** Dedicated tests for rate limiting, resilience, token detection, mock quota ceilings, reset countdown calculations, and cached snapshot fallback recovery.
 - **`tests/test_history_hardening.py` (16 tests):** Complete regression suite covering History Detail audit console Cases 1–4, HTTP 500 on database error, HTTP 400 on malformed input, 30d vs 365d snapshot consistency and window pruning isolation, resilient candidate preservation in comparisons, and GitHub API pagination failure handling with `PaginatedList`.
-- **`tests/test_production_settings.py` (9 tests):** Vercel environment detection, `.vercel.app` in `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS` wildcard validation, WSGI callable (`app` and `application`) export, `vercel.json` modern functions configuration without legacy `builds`, `build_files.sh` PEP 668 compliance (no manual pip install), `pyproject.toml` entrypoint declaration, and `DATABASE_URL` SSL parameters parsing.
+- **`tests/test_production_settings.py` (17 tests):** Vercel environment detection, `.vercel.app` in `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS` wildcard and scheme validation, WSGI callable (`app` and `application`) export, `vercel.json` modern functions configuration without legacy `builds`, `vercel.json` rewrites mapping to `config/wsgi.py`, `build_files.sh` PEP 668 compliance (no manual pip install), `pyproject.toml` entrypoint declaration, `DATABASE_URL` safe parsing for PostgreSQL (with URL-encoded passwords and SSL options) and SQLite, scheme rejection, and custom error handlers (400, 403, 404, 500).
 
 ```text
-Found 119 test(s).
+Found 133 test(s).
 System check identified no issues (0 silenced).
-.......................................................................................................................
+.....................................................................................................................................
 ----------------------------------------------------------------------
-Ran 119 tests in 8.241s
+Ran 133 tests in 6.165s
 
 OK
 ```
