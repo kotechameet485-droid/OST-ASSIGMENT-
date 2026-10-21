@@ -35,8 +35,15 @@ ENV/
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
+db.sqlite3.bak
+*.bak
+dashboard_data.json
 media/
 staticfiles/
+
+# Agent Skills & IDE Configs
+.agents/
+skills-lock.json
 
 # IDE & OS
 .vscode/
