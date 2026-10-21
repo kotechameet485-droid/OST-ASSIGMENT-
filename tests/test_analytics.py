@@ -182,11 +182,12 @@ class AnalyticsEngineTests(TestCase):
         self.assertIsNone(c_stats['top_contributor'])
 
     def test_calculate_health_score_healthy_repo(self):
+        recent_date = datetime.now(timezone.utc).isoformat()
         repo_data = {
             'stars': 100000,
             'open_issues': 500,
-            'pushed_at': '2026-10-01T12:00:00Z',
-            'updated_at': '2026-10-01T12:00:00Z',
+            'pushed_at': recent_date,
+            'updated_at': recent_date,
             'is_archived': False,
             'license': 'MIT License',
             'description': 'Production grade UI framework.',

@@ -3,6 +3,7 @@ Django settings for OpenSourceLens project.
 """
 
 from pathlib import Path
+from typing import Any, Dict
 import os
 import sys
 from dotenv import load_dotenv
@@ -139,35 +140,37 @@ elif DATABASE_URL:
         if sslmode_env:
             db_options['sslmode'] = sslmode_env
 
-    DATABASES = {
-        'default': {
-            'ENGINE': db_engine,
-            'NAME': db_name,
-            'USER': unquote(parsed_db.username or '') or DB_USER,
-            'PASSWORD': unquote(parsed_db.password or '') or DB_PASSWORD,
-            'HOST': parsed_db.hostname or DB_HOST,
-            'PORT': str(parsed_db.port or DB_PORT),
-        }
+    default_db: Dict[str, Any] = {
+        'ENGINE': db_engine,
+        'NAME': db_name,
+        'USER': unquote(parsed_db.username or '') or DB_USER,
+        'PASSWORD': unquote(parsed_db.password or '') or DB_PASSWORD,
+        'HOST': parsed_db.hostname or DB_HOST,
+        'PORT': str(parsed_db.port or DB_PORT),
     }
     if db_options:
-        DATABASES['default']['OPTIONS'] = db_options
+        default_db['OPTIONS'] = db_options
+    DATABASES: Dict[str, Dict[str, Any]] = {
+        'default': default_db,
+    }
 else:
-    db_options = {}
+    db_options_pg: Dict[str, Any] = {}
     sslmode_env = os.getenv('DB_SSLMODE', '').strip()
     if sslmode_env:
-        db_options['sslmode'] = sslmode_env
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': DB_NAME,
-            'USER': DB_USER,
-            'PASSWORD': DB_PASSWORD,
-            'HOST': DB_HOST,
-            'PORT': DB_PORT,
-        }
+        db_options_pg['sslmode'] = sslmode_env
+    default_db_pg: Dict[str, Any] = {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': DB_NAME,
+        'USER': DB_USER,
+        'PASSWORD': DB_PASSWORD,
+        'HOST': DB_HOST,
+        'PORT': DB_PORT,
     }
-    if db_options:
-        DATABASES['default']['OPTIONS'] = db_options
+    if db_options_pg:
+        default_db_pg['OPTIONS'] = db_options_pg
+    DATABASES = {
+        'default': default_db_pg,
+    }
 
 # In-memory caching for repeated API lookups and analysis data
 CACHES = {
